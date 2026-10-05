@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { config, proxyUrl } from "./config.ts";
 
@@ -12,6 +12,18 @@ const MAX_LOG_LINES = 200;
 function appDir(worktree: string): string {
   const consoleDir = path.join(worktree, "console");
   return existsSync(path.join(consoleDir, "package.json")) ? consoleDir : worktree;
+}
+
+/** Read one KEY=value from a dotenv file. Handles `export KEY=` and quoted values. */
+function readEnvValue(file: string, key: string): string | undefined {
+  if (!existsSync(file)) return undefined;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (m?.[1] !== key) continue;
+    const value = m[2].trim().replace(/^(['"])(.*)\1$/, "$2");
+    return value || undefined;
+  }
+  return undefined;
 }
 
 function freePort(): number {
@@ -30,7 +42,11 @@ export function startDevServer(worktree: string): { port: number; url: string } 
   const port = freePort();
   // Port is a number from config, so nothing user-supplied reaches the shell.
   const script = `[ -d node_modules ] || yarn install; exec yarn dev -p ${port}`;
-  const proc = spawn("bash", ["-lc", script], { cwd, detached: true, env: { ...process.env, PORT: String(port) } });
+  // main-ui's private @runpod/* packages need NPM_TOKEN for yarn install. The
+  // harness env does not carry it, but each worktree gets a copy of .env.local.
+  const npmToken = process.env.NPM_TOKEN ?? readEnvValue(path.join(cwd, ".env.local"), "NPM_TOKEN");
+  const env = { ...process.env, PORT: String(port), ...(npmToken ? { NPM_TOKEN: npmToken } : {}) };
+  const proc = spawn("bash", ["-lc", script], { cwd, detached: true, env });
   const server: DevServer = { cwd: worktree, port, proc, log: [], startedAt: Date.now() };
   const onData = (buf: Buffer) => {
     server.log.push(...buf.toString().split("\n").filter(Boolean));
