@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -104,7 +105,7 @@ app.get("/api/repos", async (c) => {
       worktrees: (await wt.listWorktrees(r.name)).map((w) => ({ ...w, dev: dev.devServerStatus(w.path) })),
     })),
   );
-  return c.json({ repos, podId: config.podId });
+  return c.json({ repos, podId: config.podId, generalDir: config.generalDir });
 });
 
 app.post("/api/worktrees", async (c) => {
@@ -273,6 +274,8 @@ app.use(
   serveStatic({ root: "./node_modules/monaco-editor/min", rewriteRequestPath: (p) => p.replace(/^\/vendor\/monaco/, "") }),
 );
 app.use("/*", serveStatic({ root: "./public" }));
+
+mkdirSync(config.generalDir, { recursive: true });
 
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`Harness listening on http://${info.address}:${info.port}`);

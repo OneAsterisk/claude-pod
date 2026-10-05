@@ -20,6 +20,8 @@ export const config = {
   podId: process.env.RUNPOD_POD_ID ?? "",
   reposDir: process.env.REPOS_DIR ?? path.join(workspace, "repos"),
   worktreesDir: process.env.WORKTREES_DIR ?? path.join(workspace, "worktrees"),
+  // A plain folder for sessions that are not about either repo (GitHub, Slack, Linear checks).
+  generalDir: process.env.GENERAL_DIR ?? path.join(workspace, "general"),
   branchPrefix: process.env.BRANCH_PREFIX ?? "benpapp/",
   devPorts: (process.env.DEV_PORTS ?? "3000,3001,3002,3003,3004,3005")
     .split(",")

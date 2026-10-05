@@ -74,9 +74,9 @@ export async function removeWorktree(repo: string, wtPath: string, force: boolea
   await run("git", args, { cwd: repoPath(repo) });
 }
 
-/** Every directory a session may run in: main checkouts plus their worktrees. */
+/** Every directory a session may run in: the General folder, main checkouts, and their worktrees. */
 export async function allowedCwds(): Promise<Set<string>> {
-  const set = new Set<string>();
+  const set = new Set<string>([config.generalDir]);
   for (const r of listRepos()) {
     for (const w of await listWorktrees(r.name).catch(() => [])) set.add(w.path);
   }

@@ -98,7 +98,10 @@ function repoForPath(p) {
   return null;
 }
 
+const GENERAL_LABEL = "General (no repo)";
+
 function worktreeLabel(p) {
+  if (p && p === state.generalDir) return GENERAL_LABEL;
   for (const r of state.repos) {
     const w = r.worktrees.find((w) => w.path === p);
     if (w) return `${r.name} · ${w.main ? "main checkout" : w.branch ?? w.path.split("/").pop()}`;
@@ -109,9 +112,14 @@ function worktreeLabel(p) {
 async function loadRepos() {
   const data = await api("/api/repos");
   state.repos = data.repos;
+  state.generalDir = data.generalDir;
   const filter = $("#repo-filter");
   const current = filter.value;
-  filter.replaceChildren(el("option", { value: "" }, "All repos"), ...state.repos.map((r) => el("option", { value: r.name }, r.name)));
+  filter.replaceChildren(
+    el("option", { value: "" }, "All repos"),
+    ...state.repos.map((r) => el("option", { value: r.name }, r.name)),
+    el("option", { value: "__general" }, GENERAL_LABEL),
+  );
   filter.value = current;
   const wtRepo = $("#wt-repo");
   const wtCurrent = wtRepo.value;
@@ -203,7 +211,9 @@ async function loadSessions() {
 
 function renderSessionList() {
   const filter = $("#repo-filter").value;
-  const items = state.sessions.filter((s) => !filter || repoForPath(s.cwd) === filter);
+  const items = state.sessions.filter(
+    (s) => !filter || (filter === "__general" ? s.cwd === state.generalDir : repoForPath(s.cwd) === filter),
+  );
   $("#session-list").replaceChildren(
     ...items.map((s) =>
       el(
@@ -489,7 +499,7 @@ async function openSession(sessionId) {
       { class: "thread-head" },
       el("div", { class: "grow" }, el("strong", {}, meta?.customTitle || meta?.summary || sessionId), el("div", { class: "meta" }, worktreeLabel(meta?.cwd), meta?.gitBranch && ` · ${meta.gitBranch}`)),
       el("span", { id: "live-status", class: "badge idle" }, "…"),
-      meta?.cwd && el("button", { onclick: () => openChanges(meta.cwd) }, "Changes"),
+      meta?.cwd && meta.cwd !== state.generalDir && el("button", { onclick: () => openChanges(meta.cwd) }, "Changes"),
       el("button", { onclick: renameCurrent }, "Rename"),
       el("button", { id: "interrupt-btn", onclick: () => post(`/api/sessions/${sessionId}/interrupt`).catch((e) => alert(e.message)) }, "Interrupt"),
       el("button", { id: "stop-btn", class: "danger", onclick: () => post(`/api/sessions/${sessionId}/stop`).catch((e) => alert(e.message)) }, "Stop"),
@@ -602,10 +612,12 @@ function openNewSession(cwd) {
   const select = $("#ns-cwd");
   select.replaceChildren(
     ...state.repos.flatMap((r) => r.worktrees.map((w) => el("option", { value: w.path }, worktreeLabel(w.path)))),
+    state.generalDir && el("option", { value: state.generalDir }, GENERAL_LABEL),
   );
   if (cwd) select.value = cwd;
   $("#ns-new-wt").checked = false;
   $("#ns-wt-name-row").hidden = true;
+  syncWorktreeOption();
   $("#ns-error").textContent = "";
   showView("sessions");
   $("#new-session").showModal();
@@ -617,6 +629,17 @@ nsAtt.wire($("#new-session-form"));
 
 $("#new-session-btn").addEventListener("click", () => openNewSession());
 $("#ns-new-wt").addEventListener("change", (e) => ($("#ns-wt-name-row").hidden = !e.target.checked));
+
+/** Worktrees only make sense inside a repo, so disable the option for General. */
+function syncWorktreeOption() {
+  const general = $("#ns-cwd").value === state.generalDir;
+  $("#ns-new-wt").disabled = general;
+  if (general) {
+    $("#ns-new-wt").checked = false;
+    $("#ns-wt-name-row").hidden = true;
+  }
+}
+$("#ns-cwd").addEventListener("change", syncWorktreeOption);
 
 $("#new-session-form").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
