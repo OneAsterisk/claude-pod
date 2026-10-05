@@ -18,7 +18,7 @@ Persistence: the template sets `HOME=/workspace/home`, which lives on the networ
 | Secret | Required | Used for |
 |---|---|---|
 | `HARNESS_PASSWORD` | yes | Harness login |
-| `GH_TOKEN` | yes | Cloning this repo and the work repos on boot. Scopes: `repo`, `read:org`, `admin:ssh_signing_key` |
+| `GH_TOKEN` | yes | First-boot clone of this repo only. Classic PAT, `repo` scope. `start.sh` unsets it afterward, and `gh auth login` handles everything else (the runpod org rejects classic PATs) |
 | `OP_SERVICE_ACCOUNT_TOKEN` | no | fnox / 1Password for RunPod SST dev |
 
 Do **not** add `ANTHROPIC_API_KEY`. It switches Claude to API-key auth, which breaks Remote Control and the claude.ai Slack connector.
@@ -80,7 +80,14 @@ SSH in using the pod's **Connect** menu (use the "SSH over exposed TCP" command 
    ```
    Also add `context`, `vercel`, and `courier` the same way, with the URLs from your local `~/.claude.json`. Then run `/mcp` inside `claude` to sign in to each one. If an OAuth redirect to `localhost:<port>` fails in your browser, reconnect SSH with `-L <port>:localhost:<port>` and retry.
 5. Check that Slack appears in `/mcp` (claude.ai connector). Note its tool prefix. If it isn't `mcp__claude_ai_Slack__`, update `--allowedTools` in `pod/crontab`.
-6. Set up commit signing (your CLAUDE.md requires `-S`):
+6. Sign in to GitHub with the browser device flow, then clone the work repos. Pick GitHub.com, HTTPS, and "Login with a web browser". Authorize the `runpod` org if GitHub asks for SSO.
+   ```bash
+   gh auth login -s admin:ssh_signing_key
+   ```
+   ```bash
+   bash /workspace/claude-pod/pod/clone-repos.sh
+   ```
+7. Set up commit signing (your CLAUDE.md requires `-S`):
    ```bash
    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
    ```
@@ -93,7 +100,7 @@ SSH in using the pod's **Connect** menu (use the "SSH over exposed TCP" command 
    ```bash
    git config --global user.name "Ben Papp" && git config --global user.email ben.papp@runpod.io
    ```
-7. Install deps. main-ui:
+8. Install deps. main-ui:
    ```bash
    cd /workspace/repos/main-ui/console && yarn install
    ```
@@ -104,7 +111,7 @@ SSH in using the pod's **Connect** menu (use the "SSH over exposed TCP" command 
    ```bash
    aws sso login --use-device-code
    ```
-8. From your Mac, copy main-ui's env file:
+9. From your Mac, copy main-ui's env file:
    ```bash
    scp -P <port> ~/repos/main-ui/console/.env.local root@<ip>:/workspace/repos/main-ui/console/.env.local
    ```

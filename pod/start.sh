@@ -12,6 +12,12 @@ mkdir -p "$HOME" "$REPOS_DIR" /workspace/worktrees
 exec > >(tee -a "$LOG") 2>&1
 echo "=== boot $(date -Is) ==="
 
+# GH_TOKEN only exists for the template's first-boot clone of claude-pod.
+# GitHub access after that comes from `gh auth login` (stored in ~/.config/gh).
+# An exported GH_TOKEN would override that login everywhere, so drop it here
+# before anything (shells, cron, the harness, Claude sessions) inherits it.
+unset GH_TOKEN
+
 # ---- System packages (every boot) ----
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -64,16 +70,8 @@ if [ ! -f "$HOME/.claude/CLAUDE.md" ]; then
   touch "$HOME/.claude/.i-have-adhd-always"
 fi
 
-# ---- Repos (first boot only) ----
-if [ -n "${GH_TOKEN:-}" ]; then
-  gh auth setup-git || true
-fi
-for repo in runpod/main-ui runpod/RunPod; do
-  dest="$REPOS_DIR/$(basename "$repo")"
-  if [ ! -d "$dest/.git" ]; then
-    gh repo clone "$repo" "$dest" || echo "WARN: clone of $repo failed. Run 'gh auth login', then rerun this script."
-  fi
-done
+# ---- Repos (clones only what is missing) ----
+REPOS_DIR="$REPOS_DIR" bash "$POD_REPO/pod/clone-repos.sh" || true
 
 # ---- SSH ----
 # Runpod injects PUBLIC_KEY with every SSH key on the account. On a shared
@@ -99,7 +97,7 @@ cp /root/.ssh/authorized_keys "$HOME/.ssh/authorized_keys" 2>/dev/null || true
 chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys" 2>/dev/null || true
 # sshd does not pass the container env to logins, so save the template env
 # (Runpod secrets included) for .bashrc to source.
-export -p | grep -E ' (GH_TOKEN|HARNESS_PASSWORD|OP_SERVICE_ACCOUNT_TOKEN|RUNPOD_[A-Z_]+)=' > /etc/rp_environment || true
+export -p | grep -E ' (HARNESS_PASSWORD|OP_SERVICE_ACCOUNT_TOKEN|RUNPOD_[A-Z_]+)=' > /etc/rp_environment || true
 chmod 600 /etc/rp_environment
 service ssh start || /usr/sbin/sshd
 
