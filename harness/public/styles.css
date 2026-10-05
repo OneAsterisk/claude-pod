@@ -178,7 +178,7 @@ label.inline { display: flex; gap: 6px; align-items: center; color: var(--muted)
   .split #thread { display: none; }
   .split.show-thread aside { display: none; }
   .split.show-thread #thread { display: flex; }
-  .back { display: inline-flex; align-items: center; }
+  .back { display: inline-flex; align-items: center; white-space: nowrap; flex: none; }
   .thread-head { padding: 8px 10px; gap: 6px; }
   .thread-head .back { padding: 6px 10px; }
   .messages { padding: 12px 10px 20px; gap: 10px; font-size: 15px; }
