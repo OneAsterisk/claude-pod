@@ -25,7 +25,7 @@ Do **not** add `ANTHROPIC_API_KEY`. It switches Claude to API-key auth, which br
 
 ### Network volume
 
-100 GB in a datacenter with `cpu3g` stock (for example `US-KS-2`). About $7/month.
+100 GB in a datacenter with `cpu3g` stock (`US-MO-2`; `US-KS-2` does not support network volumes). About $7/month.
 
 ### Template
 
@@ -49,7 +49,7 @@ Do **not** add `ANTHROPIC_API_KEY`. It switches Claude to API-key auth, which br
 
 ### Pod
 
-CPU pod, `cpu3g` (General Purpose), 16 vCPU / 64 GB ($0.64/hr), in `US-KS-2`. Attach the network volume.
+CPU pod, `cpu3g` (General Purpose), 16 vCPU / 64 GB ($0.64/hr), in `US-MO-2` (network volume `claude-pod`, id `wptkt1a837`). Attach the network volume.
 
 The Runpod account is shared, so `SSH_PUBLIC_KEY` matters: `start.sh` makes it the only authorized key. Without it, every SSH key on the account could log in.
 

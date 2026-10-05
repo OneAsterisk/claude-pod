@@ -93,7 +93,8 @@ else
   mkdir -p "$HOME/.ssh/host_keys" && cp /etc/ssh/ssh_host_* "$HOME/.ssh/host_keys/"
 fi
 # Point root's home at the volume so SSH sessions see the same ~/.claude.
-usermod -d "$HOME" root
+# usermod refuses while root has running processes (this script), so edit passwd directly.
+sed -i -E "s|^(root:[^:]*:0:0:[^:]*:)[^:]*:|\1$HOME:|" /etc/passwd
 cp /root/.ssh/authorized_keys "$HOME/.ssh/authorized_keys" 2>/dev/null || true
 chmod 700 "$HOME/.ssh"; chmod 600 "$HOME/.ssh/authorized_keys" 2>/dev/null || true
 # sshd does not pass the container env to logins, so save the template env
