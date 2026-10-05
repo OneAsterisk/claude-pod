@@ -1,0 +1,8 @@
+# Slack digest of Linear tickets. Edit the filter and schedule, then reboot
+# the pod or run: crontab /workspace/claude-pod/pod/crontab
+CRON_TZ=America/New_York
+HOME=/workspace/home
+PATH=/workspace/home/.local/bin:/workspace/home/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
+
+# Weekdays at 9:00
+0 9 * * 1-5 cd /workspace && claude -p "/dm-tickets assigned to me, not Done or Canceled" --permission-mode dontAsk --allowedTools "mcp__linear-server__*,mcp__claude_ai_Slack__*" >> /workspace/dm-tickets.log 2>&1

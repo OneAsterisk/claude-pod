@@ -1,0 +1,3 @@
+node_modules/
+harness/.dev.env
+.local-demo/
