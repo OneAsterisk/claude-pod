@@ -11,8 +11,10 @@ import * as sessions from "./sessions.ts";
 import type { ImageInput, UserInput } from "./sessions.ts";
 import * as wt from "./worktrees.ts";
 import * as dev from "./devservers.ts";
+import * as changes from "./changes.ts";
 
-const MODES: PermissionMode[] = ["default", "acceptEdits", "plan", "bypassPermissions"];
+// "auto" lets a model classifier approve or deny each tool call.
+const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "plan", "bypassPermissions"];
 
 function mode(value: unknown): PermissionMode {
   return MODES.includes(value as PermissionMode) ? (value as PermissionMode) : "default";
@@ -134,6 +136,30 @@ app.post("/api/dev/stop", async (c) => {
 
 app.get("/api/dev", (c) => c.json(dev.devServerStatus(c.req.query("path") ?? "")));
 
+// ---- Code changes (for the diff viewer) ----
+
+function changeBase(value: string | undefined): changes.ChangeBase {
+  return value === "branch" ? "branch" : "uncommitted";
+}
+
+app.get("/api/changes", async (c) => {
+  const path = c.req.query("path") ?? "";
+  await assertAllowedCwd(path);
+  return c.json(await changes.listChanges(path, changeBase(c.req.query("base"))));
+});
+
+app.get("/api/changes/file", async (c) => {
+  const path = c.req.query("path") ?? "";
+  await assertAllowedCwd(path);
+  try {
+    return c.json(
+      await changes.fileDiff(path, changeBase(c.req.query("base")), c.req.query("file") ?? "", c.req.query("oldPath") || undefined),
+    );
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+});
+
 // ---- Sessions ----
 
 app.get("/api/sessions", async (c) => c.json(await sessions.listAll()));
@@ -236,11 +262,16 @@ app.post("/api/sessions/:id/approvals/:approvalId", async (c) => {
 // Always revalidate, so a restart with new frontend code is picked up on reload.
 app.use("/*", async (c, next) => {
   await next();
-  c.header("Cache-Control", "no-cache");
+  // Monaco is large and versioned with the package, so let browsers cache it.
+  c.header("Cache-Control", c.req.path.startsWith("/vendor/monaco/") ? "public, max-age=604800" : "no-cache");
 });
 
 app.get("/vendor/marked.js", serveStatic({ path: "./node_modules/marked/lib/marked.esm.js" }));
 app.get("/vendor/purify.js", serveStatic({ path: "./node_modules/dompurify/dist/purify.es.mjs" }));
+app.use(
+  "/vendor/monaco/*",
+  serveStatic({ root: "./node_modules/monaco-editor/min", rewriteRequestPath: (p) => p.replace(/^\/vendor\/monaco/, "") }),
+);
 app.use("/*", serveStatic({ root: "./public" }));
 
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {

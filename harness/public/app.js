@@ -156,6 +156,7 @@ function worktreeCard(repo, w) {
       "div",
       { class: "row", style: "margin-top:8px" },
       el("button", { class: "primary", onclick: () => openNewSession(w.path) }, "New session here"),
+      el("button", { onclick: () => openChanges(w.path) }, "View changes"),
       ...devRow,
       !w.main &&
         el(
@@ -488,6 +489,7 @@ async function openSession(sessionId) {
       { class: "thread-head" },
       el("div", { class: "grow" }, el("strong", {}, meta?.customTitle || meta?.summary || sessionId), el("div", { class: "meta" }, worktreeLabel(meta?.cwd), meta?.gitBranch && ` · ${meta.gitBranch}`)),
       el("span", { id: "live-status", class: "badge idle" }, "…"),
+      meta?.cwd && el("button", { onclick: () => openChanges(meta.cwd) }, "Changes"),
       el("button", { onclick: renameCurrent }, "Rename"),
       el("button", { id: "interrupt-btn", onclick: () => post(`/api/sessions/${sessionId}/interrupt`).catch((e) => alert(e.message)) }, "Interrupt"),
       el("button", { id: "stop-btn", class: "danger", onclick: () => post(`/api/sessions/${sessionId}/stop`).catch((e) => alert(e.message)) }, "Stop"),
@@ -507,7 +509,7 @@ async function openSession(sessionId) {
         el(
           "select",
           { id: "composer-mode", title: "Permission mode (applies when resuming a session that is not running)" },
-          ...["default", "acceptEdits", "plan", "bypassPermissions"].map((m) => el("option", { value: m }, m)),
+          ...["default", "acceptEdits", "auto", "plan", "bypassPermissions"].map((m) => el("option", { value: m }, m)),
         ),
         el("button", { class: "primary", onclick: sendCurrent }, "Send"),
       ),
@@ -651,13 +653,181 @@ $("#new-session-form").addEventListener("submit", async (e) => {
   }
 });
 
+// ---------- Changes (Monaco diff viewer) ----------
+
+let monacoPromise = null;
+
+/** Load Monaco's AMD build on first use. It is ~25 MB, so only fetch it when needed. */
+function loadMonaco() {
+  monacoPromise ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/vendor/monaco/vs/loader.js";
+    script.onerror = () => reject(new Error("Could not load the Monaco editor"));
+    script.onload = () => {
+      window.require.config({ paths: { vs: "/vendor/monaco/vs" } });
+      window.require(["vs/editor/editor.main"], () => {
+        const monaco = window.monaco;
+        monaco.editor.defineTheme("runpod-dark", {
+          base: "vs-dark",
+          inherit: true,
+          rules: [],
+          colors: {
+            "editor.background": "#111111",
+            "editorGutter.background": "#111111",
+            "editorLineNumber.foreground": "#5a5670",
+            "editor.selectionBackground": "#6d4aff55",
+            "diffEditor.insertedTextBackground": "#3ccf9126",
+            "diffEditor.removedTextBackground": "#ff7b7b26",
+            "diffEditor.insertedLineBackground": "#3ccf9112",
+            "diffEditor.removedLineBackground": "#ff7b7b12",
+          },
+        });
+        resolve(monaco);
+      }, reject);
+    };
+    document.head.append(script);
+  });
+  return monacoPromise;
+}
+
+const changesState = { cwd: null, files: [], selected: null, editor: null, models: [], seq: 0 };
+
+const STATUS_LABEL = { A: "added", M: "modified", D: "deleted", R: "renamed" };
+
+async function openChanges(cwd) {
+  if ($("#view-changes").hidden) showView("changes", { load: false });
+  const select = $("#ch-wt");
+  select.replaceChildren(
+    ...state.repos.flatMap((r) => r.worktrees.map((w) => el("option", { value: w.path }, worktreeLabel(w.path)))),
+  );
+  const target = cwd ?? changesState.cwd ?? select.options[0]?.value;
+  if (!target) {
+    $("#ch-files").replaceChildren(el("li", { class: "diff-empty" }, "No repos found."));
+    return;
+  }
+  select.value = target;
+  if (changesState.cwd !== target) changesState.selected = null;
+  changesState.cwd = target;
+  await loadChangedFiles();
+}
+
+async function loadChangedFiles() {
+  const { cwd } = changesState;
+  const base = $("#ch-base").value;
+  $("#ch-summary").textContent = "Loading…";
+  try {
+    const data = await api(`/api/changes?path=${encodeURIComponent(cwd)}&base=${base}`);
+    changesState.files = data.files;
+    $("#ch-summary").textContent = `${data.files.length} file${data.files.length === 1 ? "" : "s"} changed · vs ${data.ref.slice(0, 8)}`;
+  } catch (e) {
+    changesState.files = [];
+    $("#ch-summary").textContent = e.message;
+  }
+  renderChangedFiles();
+  const keep = changesState.files.find((f) => f.path === changesState.selected);
+  if (keep) await showFileDiff(keep);
+  else if (changesState.files[0]) await showFileDiff(changesState.files[0]);
+  else clearDiff("No changes.");
+}
+
+function renderChangedFiles() {
+  $("#ch-files").replaceChildren(
+    ...changesState.files.map((f) =>
+      el(
+        "li",
+        { class: f.path === changesState.selected ? "selected" : "", title: f.oldPath ? `${f.oldPath} → ${f.path}` : f.path, onclick: () => showFileDiff(f) },
+        el("span", { class: `st ${f.status}`, title: STATUS_LABEL[f.status] ?? f.status }, f.status),
+        // RTL keeps the file name visible when a long path is truncated.
+        el("span", { class: "p" }, "‎" + f.path),
+      ),
+    ),
+  );
+}
+
+function disposeDiff() {
+  changesState.editor?.setModel(null);
+  for (const m of changesState.models) m.dispose();
+  changesState.models = [];
+}
+
+function clearDiff(message) {
+  disposeDiff();
+  changesState.editor?.dispose();
+  changesState.editor = null;
+  $("#ch-file-head").textContent = "";
+  $("#ch-editor").replaceChildren(el("div", { class: "diff-empty" }, message));
+}
+
+function sideText(side) {
+  if (side.binary) return null;
+  if (side.tooLarge) return null;
+  return side.text;
+}
+
+async function showFileDiff(file) {
+  changesState.selected = file.path;
+  renderChangedFiles();
+  const { cwd } = changesState;
+  const base = $("#ch-base").value;
+  const qs = `path=${encodeURIComponent(cwd)}&base=${base}&file=${encodeURIComponent(file.path)}` + (file.oldPath ? `&oldPath=${encodeURIComponent(file.oldPath)}` : "");
+  $("#ch-file-head").textContent = `${STATUS_LABEL[file.status] ?? file.status} · ${file.oldPath ? `${file.oldPath} → ` : ""}${file.path}`;
+  let data, monaco;
+  try {
+    [data, monaco] = await Promise.all([api(`/api/changes/file?${qs}`), loadMonaco()]);
+  } catch (e) {
+    clearDiff(e.message);
+    return;
+  }
+  if (changesState.selected !== file.path) return; // A newer click won.
+
+  const original = sideText(data.original);
+  const modified = sideText(data.modified);
+  if (original === null || modified === null) {
+    clearDiff(data.original.tooLarge || data.modified.tooLarge ? "File is over 2 MB, so it isn't shown." : "Binary file, not shown.");
+    $("#ch-file-head").textContent = file.path;
+    return;
+  }
+
+  if (!changesState.editor) {
+    $("#ch-editor").replaceChildren();
+    changesState.editor = monaco.editor.createDiffEditor($("#ch-editor"), {
+      theme: "runpod-dark",
+      readOnly: true,
+      originalEditable: false,
+      automaticLayout: true,
+      renderSideBySide: !$("#ch-inline").checked,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      fontSize: 13,
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      renderOverviewRuler: true,
+      hideUnchangedRegions: { enabled: true },
+    });
+  }
+  disposeDiff();
+  // Unique URIs per load so models never collide; the path's extension picks the language.
+  const n = ++changesState.seq;
+  const uri = (side, p) => monaco.Uri.from({ scheme: "harness", path: `/${n}/${side}/${p}` });
+  const origModel = monaco.editor.createModel(original, undefined, uri("original", data.oldPath ?? data.file));
+  const modModel = monaco.editor.createModel(modified, undefined, uri("modified", data.file));
+  changesState.models = [origModel, modModel];
+  changesState.editor.setModel({ original: origModel, modified: modModel });
+}
+
+$("#ch-wt").addEventListener("change", (e) => openChanges(e.target.value));
+$("#ch-base").addEventListener("change", () => loadChangedFiles());
+$("#ch-refresh").addEventListener("click", () => loadChangedFiles());
+$("#ch-inline").addEventListener("change", (e) => changesState.editor?.updateOptions({ renderSideBySide: !e.target.checked }));
+
 // ---------- Views ----------
 
-function showView(name) {
+function showView(name, { load = true } = {}) {
   for (const b of document.querySelectorAll("nav button")) b.classList.toggle("active", b.dataset.view === name);
   $("#view-sessions").hidden = name !== "sessions";
   $("#view-worktrees").hidden = name !== "worktrees";
+  $("#view-changes").hidden = name !== "changes";
   if (name === "worktrees") loadRepos();
+  if (name === "changes" && load) openChanges();
 }
 
 for (const b of document.querySelectorAll("nav button")) b.addEventListener("click", () => showView(b.dataset.view));

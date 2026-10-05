@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Claude Pod</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/vendor/monaco/vs/editor/editor.main.css">
 </head>
 <body>
   <header>
@@ -12,6 +13,7 @@
     <nav>
       <button data-view="sessions" class="active">Sessions</button>
       <button data-view="worktrees">Worktrees</button>
+      <button data-view="changes">Changes</button>
     </nav>
     <form method="post" action="/logout"><button class="link">Sign out</button></form>
   </header>
@@ -42,6 +44,27 @@
       </div>
       <div id="worktree-list"></div>
     </section>
+
+    <!-- Changes view: git diff of a worktree in a Monaco diff editor -->
+    <section id="view-changes" hidden>
+      <div class="toolbar">
+        <select id="ch-wt" title="Worktree"></select>
+        <select id="ch-base" title="Compare against">
+          <option value="uncommitted">Uncommitted changes (vs HEAD)</option>
+          <option value="branch">Whole branch (vs main)</option>
+        </select>
+        <button id="ch-refresh">Refresh</button>
+        <label class="inline"><input type="checkbox" id="ch-inline"> Inline</label>
+        <span id="ch-summary" class="meta"></span>
+      </div>
+      <div class="changes">
+        <ul id="ch-files" class="list"></ul>
+        <div class="diff-pane">
+          <div id="ch-file-head" class="diff-head"></div>
+          <div id="ch-editor"></div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <dialog id="new-session">
@@ -61,6 +84,7 @@
         <select name="permissionMode" id="ns-mode">
           <option value="default">default (approve tools here)</option>
           <option value="acceptEdits">acceptEdits</option>
+          <option value="auto">auto (classifier approves tools)</option>
           <option value="plan">plan</option>
           <option value="bypassPermissions">bypassPermissions</option>
         </select>
