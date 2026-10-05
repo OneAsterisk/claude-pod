@@ -18,8 +18,8 @@
   font-size: 14px;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 header nav { display: flex; gap: 4px; flex: 1; }
 header form { margin: 0; }
 main { flex: 1; min-height: 0; }
@@ -35,6 +35,11 @@ button.danger { border-color: var(--err); color: var(--err); }
 button.link { background: none; border: none; color: var(--muted); }
 nav button.active { background: var(--user-bg); border-color: var(--accent-line); }
 textarea { width: 100%; resize: vertical; }
+select, input { max-width: 100%; min-width: 0; }
+.toolbar > * { max-width: 100%; min-width: 0; }
+#ch-wt { flex: 1 1 220px; }
+/* Back buttons only exist on phone layouts. */
+.back { display: none; }
 a { color: #a99bff; }
 
 .split { display: grid; grid-template-columns: 340px minmax(0, 1fr); }
@@ -54,7 +59,8 @@ aside { border-right: 1px solid var(--border); display: flex; flex-direction: co
 #thread { display: flex; flex-direction: column; min-height: 0; }
 #thread .empty { margin: auto; color: var(--muted); }
 .thread-head { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.thread-head .grow { flex: 1; min-width: 200px; }
+.thread-head .grow { flex: 1 1 160px; min-width: 0; }
+.thread-head .grow strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .approval { border: 1px solid var(--warn); border-radius: 8px; padding: 10px 12px; background: #221c0e; }
 .approval pre { white-space: pre-wrap; font-size: 12px; max-height: 240px; overflow: auto; }
@@ -78,10 +84,6 @@ dialog label.inline { display: flex; gap: 8px; align-items: center; }
 dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
 .error { color: var(--err); }
 
-@media (max-width: 760px) {
-  .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: 40% 60%; }
-  aside { border-right: none; border-bottom: 1px solid var(--border); }
-}
 
 /* Image attachments */
 .attachments { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -151,11 +153,53 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
 .st { flex: none; width: 16px; font-weight: 700; text-align: center; }
 .st.A { color: var(--ok); } .st.M { color: var(--accent-soft); } .st.D { color: var(--err); } .st.R { color: var(--warn); }
 .diff-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.diff-head { padding: 8px 14px; border-bottom: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); min-height: 33px; }
+.diff-head { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); min-height: 33px; }
+#ch-file-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.diff-empty p { margin: 0 0 10px; }
+#ch-files li.diff-empty { display: block; cursor: default; font-family: inherit; font-size: 14px; }
 #ch-editor { flex: 1; min-height: 0; }
 .diff-empty { padding: 24px; color: var(--muted); }
 label.inline { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+
+/* ---- Phone layout: one pane at a time, with back buttons ---- */
 @media (max-width: 760px) {
-  .changes { grid-template-columns: minmax(0, 1fr); grid-template-rows: 35% 65%; }
-  #ch-files { border-right: none; border-bottom: 1px solid var(--border); }
+  header { gap: 8px; padding: 8px 10px; }
+  header nav { gap: 4px; order: 3; flex-basis: 100%; }
+  header nav button { flex: 1; }
+  header form { margin-left: auto; }
+  /* 16px stops iOS Safari from zooming into focused fields. Bigger targets for thumbs. */
+  button, input, select, textarea { font-size: 16px; padding: 9px 12px; }
+  .toolbar { padding: 8px; }
+  .list li { padding: 12px; }
+
+  /* Sessions: list or thread, never both. */
+  .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .split aside { border-right: none; }
+  .split #thread { display: none; }
+  .split.show-thread aside { display: none; }
+  .split.show-thread #thread { display: flex; }
+  .back { display: inline-flex; align-items: center; }
+  .thread-head { padding: 8px 10px; gap: 6px; }
+  .thread-head .back { padding: 6px 10px; }
+  .messages { padding: 12px 10px 20px; gap: 10px; font-size: 15px; }
+  .msg.user { max-width: 92%; }
+  .composer { padding: 8px; }
+  .composer textarea { min-height: 44px; }
+
+  /* Changes: file list or diff, never both. */
+  .changes { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  #ch-files { border-right: none; }
+  .changes .diff-pane { display: none; }
+  .changes.show-diff #ch-files { display: none; }
+  .changes.show-diff .diff-pane { display: flex; }
+  #ch-files li { padding: 11px 12px; font-size: 13px; }
+  .diff-head { padding: 6px 8px; }
+
+  /* Worktrees: controls stack full width. */
+  #view-worktrees .toolbar > * { flex: 1 1 100%; }
+  .wt .row button { flex: 1 1 auto; }
+
+  /* New session dialog fills the screen. */
+  dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: none; border-radius: 0; }
+  dialog form { height: 100%; overflow: auto; align-content: start; }
 }

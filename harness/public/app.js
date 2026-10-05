@@ -106,7 +106,8 @@ function worktreeLabel(p) {
     const w = r.worktrees.find((w) => w.path === p);
     if (w) return `${r.name} · ${w.main ? "main checkout" : w.branch ?? w.path.split("/").pop()}`;
   }
-  return p ?? "unknown";
+  // Sessions from folders the harness does not manage: show just the tail of the path.
+  return p ? p.split("/").filter(Boolean).slice(-2).join("/") : "unknown";
 }
 
 async function loadRepos() {
@@ -483,8 +484,13 @@ function setLiveStatus(status) {
   $("#stop-btn").disabled = !status || status === "ended";
 }
 
+function showSessionList() {
+  $("#view-sessions").classList.remove("show-thread");
+}
+
 async function openSession(sessionId) {
   state.selected = sessionId;
+  $("#view-sessions").classList.add("show-thread");
   state.seen = new Set();
   state.toolRows = new Map();
   state.eventSource?.close();
@@ -497,6 +503,7 @@ async function openSession(sessionId) {
     el(
       "div",
       { class: "thread-head" },
+      el("button", { class: "back", title: "Back to sessions", onclick: showSessionList }, "‹"),
       el("div", { class: "grow" }, el("strong", {}, meta?.customTitle || meta?.summary || sessionId), el("div", { class: "meta" }, worktreeLabel(meta?.cwd), meta?.gitBranch && ` · ${meta.gitBranch}`)),
       el("span", { id: "live-status", class: "badge idle" }, "…"),
       meta?.cwd && meta.cwd !== state.generalDir && el("button", { onclick: () => openChanges(meta.cwd) }, "Changes"),
@@ -713,7 +720,17 @@ function loadMonaco() {
   return monacoPromise;
 }
 
-const changesState = { cwd: null, files: [], selected: null, editor: null, models: [], seq: 0 };
+const changesState = { cwd: null, files: [], selected: null, editor: null, models: [], seq: 0, inlineTouched: false };
+
+const narrow = () => window.matchMedia("(max-width: 760px)").matches;
+
+/** Pick the worktree the user most likely wants: the open session's, else the first non-main worktree. */
+function defaultChangesCwd() {
+  const session = state.sessions.find((s) => s.sessionId === state.selected);
+  const known = new Set(state.repos.flatMap((r) => r.worktrees.map((w) => w.path)));
+  if (session?.cwd && known.has(session.cwd)) return session.cwd;
+  return state.repos.flatMap((r) => r.worktrees).find((w) => !w.main)?.path ?? state.repos[0]?.worktrees[0]?.path;
+}
 
 const STATUS_LABEL = { A: "added", M: "modified", D: "deleted", R: "renamed" };
 
@@ -723,7 +740,7 @@ async function openChanges(cwd) {
   select.replaceChildren(
     ...state.repos.flatMap((r) => r.worktrees.map((w) => el("option", { value: w.path }, worktreeLabel(w.path)))),
   );
-  const target = cwd ?? changesState.cwd ?? select.options[0]?.value;
+  const target = cwd ?? changesState.cwd ?? defaultChangesCwd();
   if (!target) {
     $("#ch-files").replaceChildren(el("li", { class: "diff-empty" }, "No repos found."));
     return;
@@ -731,6 +748,9 @@ async function openChanges(cwd) {
   select.value = target;
   if (changesState.cwd !== target) changesState.selected = null;
   changesState.cwd = target;
+  // Side-by-side is unreadable on a phone, so start inline there unless the user chose otherwise.
+  if (!changesState.inlineTouched) $("#ch-inline").checked = narrow();
+  $(".changes").classList.remove("show-diff");
   await loadChangedFiles();
 }
 
@@ -749,8 +769,35 @@ async function loadChangedFiles() {
   renderChangedFiles();
   const keep = changesState.files.find((f) => f.path === changesState.selected);
   if (keep) await showFileDiff(keep);
-  else if (changesState.files[0]) await showFileDiff(changesState.files[0]);
-  else clearDiff("No changes.");
+  else if (changesState.files[0] && !narrow()) await showFileDiff(changesState.files[0]);
+  else if (changesState.files[0]) clearDiff("Pick a file to see its diff.");
+  else {
+    clearDiff(emptyChangesMessage());
+    // On a phone the file list is the main view, so show the empty state there too.
+    $("#ch-files").replaceChildren(el("li", { class: "diff-empty" }, narrow() ? emptyChangesMessage() : "No files changed."));
+  }
+}
+
+function emptyChangesMessage() {
+  const label = worktreeLabel(changesState.cwd);
+  if ($("#ch-base").value === "uncommitted") {
+    return el(
+      "div",
+      {},
+      el("p", {}, `No uncommitted changes in ${label}.`),
+      el(
+        "button",
+        {
+          onclick: () => {
+            $("#ch-base").value = "branch";
+            loadChangedFiles();
+          },
+        },
+        "Show the whole branch vs main",
+      ),
+    );
+  }
+  return `${label} has no changes compared to main.`;
 }
 
 function renderChangedFiles() {
@@ -777,7 +824,7 @@ function clearDiff(message) {
   disposeDiff();
   changesState.editor?.dispose();
   changesState.editor = null;
-  $("#ch-file-head").textContent = "";
+  $("#ch-file-title").textContent = "";
   $("#ch-editor").replaceChildren(el("div", { class: "diff-empty" }, message));
 }
 
@@ -793,7 +840,8 @@ async function showFileDiff(file) {
   const { cwd } = changesState;
   const base = $("#ch-base").value;
   const qs = `path=${encodeURIComponent(cwd)}&base=${base}&file=${encodeURIComponent(file.path)}` + (file.oldPath ? `&oldPath=${encodeURIComponent(file.oldPath)}` : "");
-  $("#ch-file-head").textContent = `${STATUS_LABEL[file.status] ?? file.status} · ${file.oldPath ? `${file.oldPath} → ` : ""}${file.path}`;
+  $("#ch-file-title").textContent = `${STATUS_LABEL[file.status] ?? file.status} · ${file.oldPath ? `${file.oldPath} → ` : ""}${file.path}`;
+  $(".changes").classList.add("show-diff");
   let data, monaco;
   try {
     [data, monaco] = await Promise.all([api(`/api/changes/file?${qs}`), loadMonaco()]);
@@ -807,7 +855,7 @@ async function showFileDiff(file) {
   const modified = sideText(data.modified);
   if (original === null || modified === null) {
     clearDiff(data.original.tooLarge || data.modified.tooLarge ? "File is over 2 MB, so it isn't shown." : "Binary file, not shown.");
-    $("#ch-file-head").textContent = file.path;
+    $("#ch-file-title").textContent = file.path;
     return;
   }
 
@@ -840,7 +888,11 @@ async function showFileDiff(file) {
 $("#ch-wt").addEventListener("change", (e) => openChanges(e.target.value));
 $("#ch-base").addEventListener("change", () => loadChangedFiles());
 $("#ch-refresh").addEventListener("click", () => loadChangedFiles());
-$("#ch-inline").addEventListener("change", (e) => changesState.editor?.updateOptions({ renderSideBySide: !e.target.checked }));
+$("#ch-inline").addEventListener("change", (e) => {
+  changesState.inlineTouched = true;
+  changesState.editor?.updateOptions({ renderSideBySide: !e.target.checked });
+});
+$("#ch-back").addEventListener("click", () => $(".changes").classList.remove("show-diff"));
 
 // ---------- Views ----------
 
