@@ -172,7 +172,7 @@ Slack's API needs an app registration, but this one is only authorized for your 
 | `WATCHER_SLACK_INTERVAL_MS` | `60000` | Slack poll interval |
 | `WATCHER_GITHUB_INTERVAL_MS` | `300000` | GitHub poll interval |
 | `WATCHER_ALLOWED_OWNERS` | `runpod` | Comma-separated GitHub owners whose PRs may be reviewed |
-| `WATCHER_SLACK_USERS` | `U0BS304GAN6` | Comma-separated Slack user IDs allowed to trigger |
+| `WATCHER_SLACK_USERS` | `U0BS304GAN6` | Comma-separated Slack user IDs allowed to trigger. Also read from `watcher.env` on every poll, so edits there apply without a restart |
 | `WATCHER_MAX_CONCURRENT` | `2` | Reviews running at once |
 | `WATCHER_MAX_PER_DAY` | `30` | Reviews started per day |
 | `WATCHER_STATE_FILE` | `/workspace/watcher/state.json` | Tracked PRs, runs, and log |

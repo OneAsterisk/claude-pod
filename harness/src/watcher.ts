@@ -58,6 +58,12 @@ function slackToken(): string | undefined {
   return process.env.SLACK_USER_TOKEN || loadEnvFile().SLACK_USER_TOKEN || undefined;
 }
 
+/** Slack user IDs allowed to trigger reviews. Re-read each poll so the env file can be edited without a restart. */
+function allowedSlackUsers(): string[] {
+  const raw = process.env.WATCHER_SLACK_USERS || loadEnvFile().WATCHER_SLACK_USERS;
+  return raw ? raw.split(",").map((u) => u.trim()).filter(Boolean) : W.allowedSlackUsers;
+}
+
 const emptyState = (): State => ({
   slack: { lastTs: String(Date.now() / 1000), seen: [] },
   github: {},
@@ -270,7 +276,7 @@ async function pollSlack() {
       state.slack.seen.push(ts);
       const text: string = m.text ?? "";
       if (!TRIGGER_RE.test(text)) continue;
-      if (!W.allowedSlackUsers.includes(m.user)) {
+      if (!allowedSlackUsers().includes(m.user)) {
         log(`slack: trigger from ${m.user} ignored (not on allowlist)`);
         continue;
       }
@@ -363,7 +369,7 @@ export function status() {
     slack: { configured: !!slackToken(), intervalMs: W.slackIntervalMs, ...state.slack, seen: undefined },
     github: { intervalMs: W.githubIntervalMs, ...state.github },
     allowedOwners: W.allowedOwners,
-    allowedSlackUsers: W.allowedSlackUsers,
+    allowedSlackUsers: allowedSlackUsers(),
     maxConcurrent: W.maxConcurrent,
     maxReviewsPerDay: W.maxReviewsPerDay,
     reviewsToday: state.reviewsToday,
