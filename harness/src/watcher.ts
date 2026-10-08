@@ -25,6 +25,8 @@ type TrackedPr = {
   fromSlack?: { channel: string; ts: string; user: string };
   lastTriggeredSha?: string;
   lastClaudeRoundSha?: string | null;
+  /** submitted_at of the latest Claude round, ISO string. */
+  lastClaudeRoundAt?: string | null;
   headSha?: string;
   isDraft?: boolean;
   /** Set when the PR is in a state that should not be reviewed (merged, queued, ready to merge, ...). */
@@ -241,7 +243,8 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
   const reviewPosted = async () => {
     try {
       await refreshPr(pr);
-      return !!pr.headSha && pr.lastClaudeRoundSha === pr.headSha;
+      // A round submitted since this run began counts, even if the author pushed again after it.
+      return !!pr.lastClaudeRoundAt && Date.parse(pr.lastClaudeRoundAt) >= startedAt - 60_000;
     } catch {
       return false;
     }
@@ -260,7 +263,7 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
     if (slackCtx) {
       const why = s.lastStderr.trim().split("\n").filter(Boolean).at(-1);
       const text = ok
-        ? finalText || `Review posted for ${pr.key}.`
+        ? finalText || `Review posted for ${pr.key} (round at ${pr.lastClaudeRoundSha?.slice(0, 8)}).`
         : `Review of ${pr.key} did not complete: ${note ?? "unknown"}.${why ? `\nError: ${why}` : ""}${finalText ? `\nLast message: ${finalText.slice(0, 600)}` : ""}`;
       void reactInSlack(slackCtx.channel, slackCtx.ts, ok ? "white_check_mark" : "x");
       void replyInSlack(slackCtx.channel, slackCtx.ts, text, s.model);
@@ -288,6 +291,10 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
       const live = sessions.getLive(s.sessionId);
       if (!live) return finish(await reviewPosted(), "session gone");
       if (Date.now() - startedAt > W.maxReviewMinutes * 60_000) return finish(await reviewPosted(), `${W.maxReviewMinutes} minute limit reached`);
+      if (pr.skipReason === "already merged" || pr.skipReason === "closed") {
+        const posted = await reviewPosted();
+        return finish(posted, posted ? undefined : `the PR was ${pr.skipReason} before a review was posted`);
+      }
       if (live.status !== "idle" || Date.now() - lastActivity < W.idleNudgeMinutes * 60_000) return;
       if (await reviewPosted()) return finish(true);
       if (nudged) return finish(false, "idle with no review posted after a nudge");
@@ -421,9 +428,11 @@ async function refreshPr(pr: TrackedPr) {
     `repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`,
     "--paginate",
     "--jq",
-    `[.[] | select(.user.login == "${me}" and (.body | test("Claude review, round")))] | sort_by(.submitted_at) | last | .commit_id // empty`,
+    `[.[] | select(.user.login == "${me}" and (.body | test("Claude review, round")))] | sort_by(.submitted_at) | last | "\(.commit_id) \(.submitted_at)"`,
   ]);
-  pr.lastClaudeRoundSha = rounds.trim() || null;
+  const [sha, at] = rounds.trim().split(" ");
+  pr.lastClaudeRoundSha = sha || null;
+  pr.lastClaudeRoundAt = at || null;
   return view.state as string;
 }
 
@@ -451,6 +460,7 @@ async function pollGithub() {
       if (pr.isDraft && !pr.fromSlack) continue; // Skill rule: skip drafts unless sent directly.
       if (!pr.headSha || pr.headSha === pr.lastClaudeRoundSha) continue;
       if (pr.lastTriggeredSha === pr.headSha) continue; // Already tried this head.
+      if (running(pr)) continue; // The running review's finish check handles head moves.
       startReview(pr, { kind: "github", headSha: pr.headSha, lastRoundSha: pr.lastClaudeRoundSha });
     }
     state.github.lastPoll = Date.now();
