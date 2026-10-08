@@ -932,6 +932,7 @@ async function loadWatcher() {
           el("a", { href: p.url, target: "_blank", rel: "noopener" }, el("strong", {}, p.key)),
           p.running && el("span", { class: "badge running" }, "reviewing"),
           p.isDraft && el("span", { class: "badge idle" }, "draft"),
+          p.skipReason && el("span", { class: "badge approval", title: "Reviews are skipped while the PR is in this state" }, p.skipReason),
           p.fromSlack && el("span", { class: "badge approval" }, "from Slack"),
           el("span", { class: "sha" }, `head ${p.headSha?.slice(0, 8) ?? "?"} · last Claude round ${p.lastClaudeRoundSha ? p.lastClaudeRoundSha.slice(0, 8) : "none"}`),
           el("button", { onclick: () => reviewNow(p.url) }, "Review now"),

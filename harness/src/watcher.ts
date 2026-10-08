@@ -27,8 +27,32 @@ type TrackedPr = {
   lastClaudeRoundSha?: string | null;
   headSha?: string;
   isDraft?: boolean;
+  /** Set when the PR is in a state that should not be reviewed (merged, queued, ready to merge, ...). */
+  skipReason?: string;
   runs: Run[];
 };
+
+const SKIP_LABEL_RE = /ready.?to.?merge|merge.?queue|queued|do.?not.?review|skip.?review|no.?review/i;
+
+/** Why a PR should not be reviewed right now, or undefined if it is fair game. */
+function skipReasonFor(v: {
+  state: string;
+  mergeStateStatus?: string;
+  reviewDecision?: string;
+  autoMergeRequest?: unknown;
+  isInMergeQueue?: boolean;
+  labels?: { name: string }[];
+}): string | undefined {
+  if (v.state === "MERGED") return "already merged";
+  if (v.state === "CLOSED") return "closed";
+  if (v.isInMergeQueue) return "queued to merge";
+  if (v.autoMergeRequest) return "auto-merge is enabled";
+  // CLEAN = approved, checks green, no conflicts: GitHub's "ready to merge".
+  if (v.mergeStateStatus === "CLEAN" && v.reviewDecision === "APPROVED") return "ready to merge (approved, checks passing)";
+  const label = v.labels?.find((l) => SKIP_LABEL_RE.test(l.name));
+  if (label) return `labeled "${label.name}"`;
+  return undefined;
+}
 
 type State = {
   slack: { lastTs: string; seen: string[]; lastPoll?: number; lastError?: string };
@@ -145,6 +169,10 @@ async function operatorLogin(): Promise<string> {
 // ---- Starting a review ----
 
 function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
+  if (pr.skipReason) {
+    log(`${pr.key}: not reviewing, ${pr.skipReason}`);
+    return null;
+  }
   if (running(pr)) {
     log(`${pr.key}: review already running, skipped`);
     return null;
@@ -347,6 +375,11 @@ async function pollSlack() {
         const pr = track(p);
         pr.fromSlack = { channel: m.channel?.id, ts, user: m.user };
         await refreshPr(pr).catch(() => {});
+        if (pr.skipReason) {
+          log(`${pr.key}: Slack request skipped, ${pr.skipReason}`);
+          await replyInSlack(m.channel?.id, ts, `Not reviewing ${pr.key}: it is ${pr.skipReason}.`);
+          continue;
+        }
         const started = startReview(pr, { kind: "slack", user: m.user, channel: m.channel?.id, ts, text });
         if (started) {
           await reactInSlack(m.channel?.id, ts, "eyes");
@@ -371,9 +404,18 @@ async function pollSlack() {
 
 async function refreshPr(pr: TrackedPr) {
   const me = await operatorLogin();
-  const view = JSON.parse(await gh(["pr", "view", String(pr.number), "--repo", `${pr.owner}/${pr.repo}`, "--json", "headRefOid,isDraft,state"]));
+  const view = JSON.parse(
+    await gh(["pr", "view", String(pr.number), "--repo", `${pr.owner}/${pr.repo}`, "--json", "headRefOid,isDraft,state,mergeStateStatus,reviewDecision,autoMergeRequest,labels"]),
+  );
   pr.headSha = view.headRefOid;
   pr.isDraft = view.isDraft;
+  // Merge queue membership is only in GraphQL.
+  const inQueue = await gh([
+    "api", "graphql", "-F", `o=${pr.owner}`, "-F", `r=${pr.repo}`, "-F", `n=${pr.number}`,
+    "-f", "query=query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){isInMergeQueue}}}",
+    "--jq", ".data.repository.pullRequest.isInMergeQueue",
+  ]).then((out) => out.trim() === "true").catch(() => false);
+  pr.skipReason = skipReasonFor({ ...view, isInMergeQueue: inQueue });
   const rounds = await gh([
     "api",
     `repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`,
@@ -404,7 +446,7 @@ async function pollGithub() {
         log(`${pr.key}: refresh failed: ${err.message}`);
         return "UNKNOWN";
       });
-      if (prState !== "OPEN") continue;
+      if (prState !== "OPEN" || pr.skipReason) continue;
       if (!pr.lastClaudeRoundSha) continue; // No Claude round yet: nothing to re-review.
       if (pr.isDraft && !pr.fromSlack) continue; // Skill rule: skip drafts unless sent directly.
       if (!pr.headSha || pr.headSha === pr.lastClaudeRoundSha) continue;
@@ -445,6 +487,10 @@ export async function reviewNow(url: string) {
   if (!p) throw new Error(`Not a PR link in an allowed org (${W.allowedOwners.join(", ")})`);
   const pr = track(p);
   await refreshPr(pr);
+  if (pr.skipReason) {
+    saveState();
+    throw new Error(`Not reviewing ${pr.key}: it is ${pr.skipReason}`);
+  }
   const started = startReview(pr, { kind: "manual" });
   saveState();
   return { pr: pr.key, started: !!started, sessionId: started?.sessionId };
