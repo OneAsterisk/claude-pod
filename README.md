@@ -154,7 +154,7 @@ Guard rails: only `github.com/<allowed owner>/...` links count, the watcher pass
 Slack's API needs an app registration, but this one is only authorized for your own account:
 
 1. Go to https://api.slack.com/apps → **Create New App** → From scratch → name `claude-pod-watcher`, pick the Runpod workspace.
-2. **OAuth & Permissions** → **User Token Scopes**: add `search:read` and `chat:write`.
+2. **OAuth & Permissions** → **User Token Scopes**: add `search:read`, `chat:write`, and `reactions:write`.
 3. **Install to Workspace** and authorize. If the workspace requires admin approval, request it.
 4. Copy the **User OAuth Token** (`xoxp-...`). On the pod:
    ```bash

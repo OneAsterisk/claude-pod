@@ -199,7 +199,10 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
       runRec.summary = finalText.slice(0, 2000);
       log(`${pr.key}: review ${runRec.ok ? "finished" : "failed"}`);
       saveState();
-      if (trigger.kind === "slack") void replyInSlack(trigger.channel, trigger.ts, finalText || "The review session ended without a summary.");
+      if (trigger.kind === "slack") {
+        void reactInSlack(trigger.channel, trigger.ts, runRec.ok ? "white_check_mark" : "x");
+        void replyInSlack(trigger.channel, trigger.ts, finalText || "The review session ended without a summary.");
+      }
       // Stop the session so the process exits; the transcript stays on disk.
       sessions.getLive(s.sessionId)?.stop();
     }
@@ -218,6 +221,15 @@ async function slackApi(method: string, params: Record<string, string>, token: s
   const data = await res.json();
   if (!data.ok) throw new Error(`${method}: ${data.error}`);
   return data;
+}
+
+/** Acknowledge a trigger message with an emoji reaction (needs the reactions:write user scope). */
+async function reactInSlack(channel: string, ts: string, name: string) {
+  const token = slackToken();
+  if (!token) return;
+  await slackApi("reactions.add", { channel, timestamp: ts, name }, token).catch((err) => {
+    if (!/already_reacted/.test(err.message)) log(`slack reaction failed: ${err.message}`);
+  });
 }
 
 async function replyInSlack(channel: string, threadTs: string, text: string) {
@@ -263,7 +275,10 @@ async function pollSlack() {
         pr.fromSlack = { channel: m.channel?.id, ts, user: m.user };
         await refreshPr(pr).catch(() => {});
         const started = startReview(pr, { kind: "slack", user: m.user, channel: m.channel?.id, ts, text });
-        if (started) await replyInSlack(m.channel?.id, ts, `On it. Reviewing ${pr.key}; I'll reply here when the review is posted.`);
+        if (started) {
+          await reactInSlack(m.channel?.id, ts, "eyes");
+          await replyInSlack(m.channel?.id, ts, `On it. Reviewing ${pr.key}; I'll reply here when the review is posted.`);
+        }
       }
     }
     state.slack.lastTs = newest;
