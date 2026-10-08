@@ -13,6 +13,7 @@ import type { ImageInput, UserInput } from "./sessions.ts";
 import * as wt from "./worktrees.ts";
 import * as dev from "./devservers.ts";
 import * as changes from "./changes.ts";
+import * as watcher from "./watcher.ts";
 
 // "auto" lets a model classifier approve or deny each tool call.
 const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "plan", "bypassPermissions"];
@@ -258,6 +259,21 @@ app.post("/api/sessions/:id/approvals/:approvalId", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---- PR review watcher ----
+
+app.get("/api/watcher", (c) => c.json(watcher.status()));
+
+app.post("/api/watcher/review", async (c) => {
+  const { url } = await body<{ url: string }>(c);
+  try {
+    return c.json(await watcher.reviewNow(url ?? ""));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+});
+
+app.post("/api/watcher/poll", async (c) => c.json(await watcher.pollNow()));
+
 // ---- Frontend ----
 
 // Always revalidate, so a restart with new frontend code is picked up on reload.
@@ -276,6 +292,7 @@ app.use(
 app.use("/*", serveStatic({ root: "./public" }));
 
 mkdirSync(config.generalDir, { recursive: true });
+watcher.start();
 
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`Harness listening on http://${info.address}:${info.port}`);

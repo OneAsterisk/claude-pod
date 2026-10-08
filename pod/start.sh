@@ -70,6 +70,10 @@ if [ ! -f "$HOME/.claude/CLAUDE.md" ]; then
   touch "$HOME/.claude/.i-have-adhd-always"
 fi
 
+# Skills sync every boot so updates in the repo land on the pod.
+mkdir -p "$HOME/.claude/skills"
+cp -R "$POD_REPO"/claude/skills/. "$HOME/.claude/skills/"
+
 # ---- Repos (clones only what is missing) ----
 REPOS_DIR="$REPOS_DIR" bash "$POD_REPO/pod/clone-repos.sh" || true
 

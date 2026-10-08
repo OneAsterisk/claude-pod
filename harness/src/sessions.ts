@@ -98,6 +98,7 @@ class LiveSession {
     firstInput: UserInput,
     permissionMode: PermissionMode,
     resume: boolean,
+    title?: string,
   ) {
     this.input.push(firstInput);
     this.q = query({
@@ -105,6 +106,8 @@ class LiveSession {
       options: {
         cwd,
         permissionMode,
+        // Only honored for new sessions; resumed ones keep their saved title.
+        ...(title && !resume ? { title } : {}),
         allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
         ...(resume ? { resume: sessionId } : { sessionId }),
         systemPrompt: { type: "preset", preset: "claude_code" },
@@ -221,17 +224,8 @@ export function startSession(opts: {
   title?: string;
 }): LiveSession {
   const id = randomUUID();
-  const s = new LiveSession(id, opts.cwd, opts.input, opts.permissionMode, false);
+  const s = new LiveSession(id, opts.cwd, opts.input, opts.permissionMode, false, opts.title);
   live.set(id, s);
-  if (opts.title) {
-    // The transcript file only exists after the first message lands.
-    const unsubscribe = s.subscribe((e) => {
-      if (e.kind === "message" && e.message.type === "system") {
-        unsubscribe();
-        renameSession(id, opts.title!).catch((err) => console.error("rename failed", err));
-      }
-    });
-  }
   return s;
 }
 

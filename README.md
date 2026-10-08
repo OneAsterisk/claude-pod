@@ -137,7 +137,50 @@ SSH in using the pod's **Connect** menu (use the "SSH over exposed TCP" command 
 - **Approvals**: in `default`/`acceptEdits` mode, tool permission prompts show up with Allow / Deny.
 - **Worktrees**: add, remove (confirms first), start/stop a dev server on ports 3000-3005 with proxy link and log.
 
-## 4. Known risks
+## 4. PR review watcher
+
+The harness runs a watcher that starts `/pr-review` sessions on its own. Each review shows up in the Sessions list titled `PR review: owner/repo#n`, and the **Watcher** tab shows status, tracked PRs, and a log.
+
+| Trigger | Interval | What happens |
+|---|---|---|
+| A Slack DM containing "Watcher, please review <PR link>" from a user on the allowlist | every 60s | Starts a review and replies in the Slack thread when it is posted |
+| A new push to an open PR in an allowed org that already has a "Claude review, round N" from your GitHub account | every 5 min | Starts a re-review (round N+1). Drafts are skipped unless the PR came in through Slack |
+| **Review now** in the Watcher tab | on click | Starts a review of the pasted link |
+
+Guard rails: only `github.com/<allowed owner>/...` links count, the watcher passes nothing but the URL and the trigger reason to Claude, at most 2 reviews run at once, and at most 30 start per day. Reviews run with `bypassPermissions` in `/workspace/general`; the skill clones each PR into its own scratch directory.
+
+### Slack setup (one time)
+
+Slack's API needs an app registration, but this one is only authorized for your own account:
+
+1. Go to https://api.slack.com/apps → **Create New App** → From scratch → name `claude-pod-watcher`, pick the Runpod workspace.
+2. **OAuth & Permissions** → **User Token Scopes**: add `search:read` and `chat:write`.
+3. **Install to Workspace** and authorize. If the workspace requires admin approval, request it.
+4. Copy the **User OAuth Token** (`xoxp-...`). On the pod:
+   ```bash
+   mkdir -p ~/.config/claude-pod && chmod 700 ~/.config/claude-pod && read -rs T && printf 'SLACK_USER_TOKEN=%s\n' "$T" > ~/.config/claude-pod/watcher.env && chmod 600 ~/.config/claude-pod/watcher.env
+   ```
+   Paste the token at the hidden prompt and press Enter.
+5. Restart the harness (`tmux kill-session -t harness` then the harness block in `pod/start.sh`). The Watcher tab should show "Slack DMs · OK".
+
+### Settings (env vars on the harness)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `WATCHER_ENABLED` | `1` | `0` turns the watcher off |
+| `WATCHER_DRY_RUN` | unset | `1` logs what would start without starting sessions |
+| `WATCHER_SLACK_INTERVAL_MS` | `60000` | Slack poll interval |
+| `WATCHER_GITHUB_INTERVAL_MS` | `300000` | GitHub poll interval |
+| `WATCHER_ALLOWED_OWNERS` | `runpod` | Comma-separated GitHub owners whose PRs may be reviewed |
+| `WATCHER_SLACK_USERS` | `U0BS304GAN6` | Comma-separated Slack user IDs allowed to trigger |
+| `WATCHER_MAX_CONCURRENT` | `2` | Reviews running at once |
+| `WATCHER_MAX_PER_DAY` | `30` | Reviews started per day |
+| `WATCHER_STATE_FILE` | `/workspace/watcher/state.json` | Tracked PRs, runs, and log |
+| `WATCHER_ENV_FILE` | `~/.config/claude-pod/watcher.env` | Where `SLACK_USER_TOKEN` is read from |
+
+The `pr-review` skill lives in `claude/skills/pr-review/` and is copied to `~/.claude/skills/` on every boot, so edit it in the repo.
+
+## 5. Known risks
 
 | Risk | Fallback |
 |---|---|

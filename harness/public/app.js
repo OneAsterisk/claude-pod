@@ -894,6 +894,101 @@ $("#ch-inline").addEventListener("change", (e) => {
 });
 $("#ch-back").addEventListener("click", () => $(".changes").classList.remove("show-diff"));
 
+// ---------- Watcher (PR review automation) ----------
+
+function when(ms) {
+  return ms ? `${ago(ms)} (${new Date(ms).toLocaleTimeString()})` : "never";
+}
+
+function card(k, v, cls = "") {
+  return el("div", { class: "wa-card" }, el("div", { class: "k" }, k), el("div", { class: `v ${cls}` }, v));
+}
+
+async function loadWatcher() {
+  let w;
+  try {
+    w = await api("/api/watcher");
+  } catch (e) {
+    $("#wa-status").replaceChildren(card("Watcher", e.message, "bad"));
+    return;
+  }
+  const slackState = !w.slack.configured ? ["No Slack token (see README)", "warn"] : w.slack.lastError ? [w.slack.lastError, "bad"] : [`OK · polled ${when(w.slack.lastPoll)}`, "ok"];
+  const ghState = w.github.lastError ? [w.github.lastError, "bad"] : [`OK · polled ${when(w.github.lastPoll)}`, "ok"];
+  $("#wa-status").replaceChildren(
+    card("Watcher", w.enabled ? (w.dryRun ? "Enabled (dry run: logs only)" : "Enabled") : "Disabled", w.enabled ? (w.dryRun ? "warn" : "ok") : "bad"),
+    card(`Slack DMs · every ${w.slack.intervalMs / 1000}s`, ...slackState),
+    card(`GitHub · every ${w.github.intervalMs / 1000}s`, ...ghState),
+    card("Limits", `${w.reviewsToday.count}/${w.maxReviewsPerDay} reviews today · max ${w.maxConcurrent} at once · orgs: ${w.allowedOwners.join(", ")}`),
+  );
+
+  $("#wa-prs").replaceChildren(
+    ...w.prs.map((p) =>
+      el(
+        "div",
+        { class: "wa-pr" },
+        el(
+          "div",
+          { class: "row" },
+          el("a", { href: p.url, target: "_blank", rel: "noopener" }, el("strong", {}, p.key)),
+          p.running && el("span", { class: "badge running" }, "reviewing"),
+          p.isDraft && el("span", { class: "badge idle" }, "draft"),
+          p.fromSlack && el("span", { class: "badge approval" }, "from Slack"),
+          el("span", { class: "sha" }, `head ${p.headSha?.slice(0, 8) ?? "?"} · last Claude round ${p.lastClaudeRoundSha ? p.lastClaudeRoundSha.slice(0, 8) : "none"}`),
+          el("button", { onclick: () => reviewNow(p.url) }, "Review now"),
+        ),
+        p.runs.length > 0 &&
+          el(
+            "ul",
+            { class: "runs" },
+            ...p.runs
+              .slice()
+              .reverse()
+              .slice(0, 5)
+              .map((r) =>
+                el(
+                  "li",
+                  {},
+                  `${when(r.startedAt)} · ${r.trigger} · ${r.endedAt ? (r.ok ? "finished" : "failed") : "running"} · `,
+                  el("a", { href: "#", onclick: (e) => (e.preventDefault(), showView("sessions"), openSession(r.sessionId)) }, "open session"),
+                ),
+              ),
+          ),
+      ),
+    ),
+  );
+  if (!w.prs.length) $("#wa-prs").append(el("div", { class: "meta" }, "No PRs tracked yet. Reviews start from a Slack DM, a push to an already-reviewed PR, or the Review now button."));
+
+  $("#wa-log").replaceChildren(
+    ...w.log.map((l) => el("li", {}, el("time", {}, new Date(l.at).toLocaleTimeString()), l.msg)),
+  );
+}
+
+async function reviewNow(url) {
+  if (!url?.trim()) return alert("Paste a PR link first.");
+  try {
+    const r = await post("/api/watcher/review", { url: url.trim() });
+    if (r.sessionId) {
+      await loadSessions();
+      showView("sessions");
+      await openSession(r.sessionId);
+    } else {
+      alert(`Not started for ${r.pr}. Check Recent activity for the reason.`);
+      loadWatcher();
+    }
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+$("#wa-review").addEventListener("click", () => reviewNow($("#wa-url").value));
+$("#wa-poll").addEventListener("click", async () => {
+  $("#wa-poll").disabled = true;
+  await post("/api/watcher/poll").catch((e) => alert(e.message));
+  $("#wa-poll").disabled = false;
+  loadWatcher();
+});
+$("#wa-refresh").addEventListener("click", loadWatcher);
+
 // ---------- Views ----------
 
 function showView(name, { load = true } = {}) {
@@ -901,6 +996,8 @@ function showView(name, { load = true } = {}) {
   $("#view-sessions").hidden = name !== "sessions";
   $("#view-worktrees").hidden = name !== "worktrees";
   $("#view-changes").hidden = name !== "changes";
+  $("#view-watcher").hidden = name !== "watcher";
+  if (name === "watcher") loadWatcher();
   if (name === "worktrees") loadRepos();
   if (name === "changes" && load) openChanges();
 }

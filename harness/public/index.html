@@ -14,6 +14,7 @@
       <button data-view="sessions" class="active">Sessions</button>
       <button data-view="worktrees">Worktrees</button>
       <button data-view="changes">Changes</button>
+      <button data-view="watcher">Watcher</button>
     </nav>
     <form method="post" action="/logout"><button class="link">Sign out</button></form>
   </header>
@@ -67,6 +68,21 @@
           <div id="ch-editor"></div>
         </div>
       </div>
+    </section>
+
+    <!-- Watcher view: PR review automation status -->
+    <section id="view-watcher" hidden>
+      <div class="toolbar">
+        <input id="wa-url" placeholder="https://github.com/runpod/<repo>/pull/<n>">
+        <button id="wa-review" class="primary">Review now</button>
+        <button id="wa-poll">Poll now</button>
+        <button id="wa-refresh">Refresh</button>
+      </div>
+      <div id="wa-status" class="wa-status"></div>
+      <h3>Tracked pull requests</h3>
+      <div id="wa-prs"></div>
+      <h3>Recent activity</h3>
+      <ul id="wa-log" class="wa-log"></ul>
     </section>
   </main>
 

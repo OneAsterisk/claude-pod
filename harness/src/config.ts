@@ -27,6 +27,20 @@ export const config = {
     .split(",")
     .map((p) => Number(p.trim())),
   home: os.homedir(),
+  // PR review watcher (Slack DMs + GitHub pushes). See README "Watcher".
+  watcher: {
+    enabled: process.env.WATCHER_ENABLED !== "0",
+    dryRun: process.env.WATCHER_DRY_RUN === "1",
+    slackIntervalMs: Number(process.env.WATCHER_SLACK_INTERVAL_MS ?? 60_000),
+    githubIntervalMs: Number(process.env.WATCHER_GITHUB_INTERVAL_MS ?? 300_000),
+    allowedOwners: (process.env.WATCHER_ALLOWED_OWNERS ?? "runpod").split(",").map((o) => o.trim().toLowerCase()).filter(Boolean),
+    allowedSlackUsers: (process.env.WATCHER_SLACK_USERS ?? "U0BS304GAN6").split(",").map((u) => u.trim()).filter(Boolean),
+    maxConcurrent: Number(process.env.WATCHER_MAX_CONCURRENT ?? 2),
+    maxReviewsPerDay: Number(process.env.WATCHER_MAX_PER_DAY ?? 30),
+    stateFile: process.env.WATCHER_STATE_FILE ?? path.join(workspace, "watcher", "state.json"),
+    // SLACK_USER_TOKEN=xoxp-... lives here (chmod 600) when not set in the environment.
+    envFile: process.env.WATCHER_ENV_FILE ?? path.join(os.homedir(), ".config", "claude-pod", "watcher.env"),
+  },
 };
 
 export function proxyUrl(port: number): string {
