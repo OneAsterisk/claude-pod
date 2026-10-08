@@ -41,7 +41,8 @@ type State = {
 // ---- Config and state ----
 
 const W = config.watcher;
-const TRIGGER_RE = /watcher,?\s*please\s+review/i;
+// "Watcher, please review", "Watcher review", "watcher: please review" all count.
+const TRIGGER_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?review\b/i;
 const PR_URL_RE = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/gi;
 
 function loadEnvFile(): Record<string, string> {
@@ -316,7 +317,7 @@ async function pollSlack() {
     const after = new Date(Number(state.slack.lastTs) * 1000 - 2 * 86_400_000).toISOString().slice(0, 10);
     const data = await slackApi(
       "search.messages",
-      { query: `"please review" is:dm after:${after}`, sort: "timestamp", sort_dir: "desc", count: "20" },
+      { query: `watcher is:dm after:${after}`, sort: "timestamp", sort_dir: "desc", count: "20" },
       token,
     );
     const matches: any[] = data.messages?.matches ?? [];
