@@ -246,10 +246,13 @@ async function pollSlack() {
   const token = slackToken();
   if (!token) return;
   try {
-    // One search call per poll instead of reading every DM channel.
+    // One search call per poll instead of reading every DM channel. Slack's
+    // `after:` excludes the named day in the user's timezone, so go back two
+    // days from the cursor; the ts comparison below drops anything already seen.
+    const after = new Date(Number(state.slack.lastTs) * 1000 - 2 * 86_400_000).toISOString().slice(0, 10);
     const data = await slackApi(
       "search.messages",
-      { query: `"please review" is:dm after:${new Date(Number(state.slack.lastTs) * 1000 - 86_400_000).toISOString().slice(0, 10)}`, sort: "timestamp", sort_dir: "desc", count: "20" },
+      { query: `"please review" is:dm after:${after}`, sort: "timestamp", sort_dir: "desc", count: "20" },
       token,
     );
     const matches: any[] = data.messages?.matches ?? [];
