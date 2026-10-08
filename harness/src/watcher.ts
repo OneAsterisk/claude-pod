@@ -198,27 +198,79 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
   log(`${pr.key}: started review session ${s.sessionId.slice(0, 8)} (${trigger.kind})`);
   saveState();
 
+  // The skill fans out to background agents, so a turn can end before the review
+  // is posted. A run is finished only when GitHub has a Claude round at the PR
+  // head, the session dies, or the time limit passes.
   let finalText = "";
-  const unsubscribe = s.subscribe((e) => {
-    if (e.kind === "message" && e.message.type === "result") {
-      runRec.ok = e.message.subtype === "success";
-      finalText = e.message.subtype === "success" ? e.message.result : `Review ended with ${e.message.subtype}`;
+  let lastActivity = Date.now();
+  let nudged = false;
+  let settled = false;
+  let unsubscribe: () => void = () => {};
+  let timer: NodeJS.Timeout | undefined;
+  const startedAt = Date.now();
+
+  const reviewPosted = async () => {
+    try {
+      await refreshPr(pr);
+      return !!pr.headSha && pr.lastClaudeRoundSha === pr.headSha;
+    } catch {
+      return false;
     }
-    if (e.kind === "status" && e.status !== "running") {
-      unsubscribe();
-      runRec.endedAt = Date.now();
-      runRec.summary = finalText.slice(0, 2000);
-      log(`${pr.key}: review ${runRec.ok ? "finished" : "failed"}`);
-      saveState();
-      if (slackCtx) {
-        const why = s.lastStderr.trim().split("\n").filter(Boolean).at(-1);
-        void reactInSlack(slackCtx.channel, slackCtx.ts, runRec.ok ? "white_check_mark" : "x");
-        void replyInSlack(slackCtx.channel, slackCtx.ts, finalText || `The review session ended without a summary.${why ? `\nError: ${why}` : ""}`);
+  };
+
+  const finish = (ok: boolean, note?: string) => {
+    if (settled) return;
+    settled = true;
+    unsubscribe();
+    if (timer) clearInterval(timer);
+    runRec.ok = ok;
+    runRec.endedAt = Date.now();
+    runRec.summary = (finalText || note || "").slice(0, 2000);
+    log(`${pr.key}: review ${ok ? "posted" : "failed"}${note ? ` (${note})` : ""}`);
+    saveState();
+    if (slackCtx) {
+      const why = s.lastStderr.trim().split("\n").filter(Boolean).at(-1);
+      const text = ok
+        ? finalText || `Review posted for ${pr.key}.`
+        : `Review of ${pr.key} did not complete: ${note ?? "unknown"}.${why ? `\nError: ${why}` : ""}${finalText ? `\nLast message: ${finalText.slice(0, 600)}` : ""}`;
+      void reactInSlack(slackCtx.channel, slackCtx.ts, ok ? "white_check_mark" : "x");
+      void replyInSlack(slackCtx.channel, slackCtx.ts, text);
+    }
+    // Stop the session so the process exits; the transcript stays on disk.
+    sessions.getLive(s.sessionId)?.stop();
+  };
+
+  unsubscribe = s.subscribe((e) => {
+    if (e.kind === "message") {
+      lastActivity = Date.now();
+      if (e.message.type === "result") {
+        finalText = e.message.subtype === "success" ? e.message.result : `Review ended with ${e.message.subtype}`;
+        void reviewPosted().then((posted) => posted && finish(true));
       }
-      // Stop the session so the process exits; the transcript stays on disk.
-      sessions.getLive(s.sessionId)?.stop();
+    }
+    if (e.kind === "status" && e.status === "ended") {
+      void reviewPosted().then((posted) => finish(posted, posted ? undefined : "the session exited before posting the review"));
     }
   });
+
+  timer = setInterval(() => {
+    void (async () => {
+      if (settled) return;
+      const live = sessions.getLive(s.sessionId);
+      if (!live) return finish(await reviewPosted(), "session gone");
+      if (Date.now() - startedAt > W.maxReviewMinutes * 60_000) return finish(await reviewPosted(), `${W.maxReviewMinutes} minute limit reached`);
+      if (live.status !== "idle" || Date.now() - lastActivity < W.idleNudgeMinutes * 60_000) return;
+      if (await reviewPosted()) return finish(true);
+      if (nudged) return finish(false, "idle with no review posted after a nudge");
+      nudged = true;
+      lastActivity = Date.now();
+      log(`${pr.key}: idle without a posted review, nudging`);
+      live.send({
+        text: "Status check from the watcher: no GitHub review for this PR exists at the current head yet. If your background review agents have reported, verify and merge their findings now and post the review (SKILL.md section 8). If they are still running, say so in one line and keep waiting for them.",
+      });
+    })();
+  }, 30_000);
+
   return runRec;
 }
 

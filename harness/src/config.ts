@@ -37,6 +37,9 @@ export const config = {
     allowedSlackUsers: (process.env.WATCHER_SLACK_USERS ?? "U0BS304GAN6").split(",").map((u) => u.trim()).filter(Boolean),
     maxConcurrent: Number(process.env.WATCHER_MAX_CONCURRENT ?? 2),
     maxReviewsPerDay: Number(process.env.WATCHER_MAX_PER_DAY ?? 30),
+    // A review is done only when the GitHub review exists at the PR head. These bound the wait.
+    maxReviewMinutes: Number(process.env.WATCHER_MAX_REVIEW_MINUTES ?? 60),
+    idleNudgeMinutes: Number(process.env.WATCHER_IDLE_NUDGE_MINUTES ?? 8),
     stateFile: process.env.WATCHER_STATE_FILE ?? path.join(workspace, "watcher", "state.json"),
     // SLACK_USER_TOKEN=xoxp-... lives here (chmod 600) when not set in the environment.
     envFile: process.env.WATCHER_ENV_FILE ?? path.join(os.homedir(), ".config", "claude-pod", "watcher.env"),
