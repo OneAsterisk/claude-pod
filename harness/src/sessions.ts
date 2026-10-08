@@ -88,6 +88,9 @@ class LiveSession {
   status: LiveStatus = "running";
   /** Last stderr output from the CLI, so a failed unattended run can report why. */
   lastStderr = "";
+  /** Model id reported by the CLI's init message. */
+  model?: string;
+  private modelWaiters: ((m: string | undefined) => void)[] = [];
   readonly events: HarnessEvent[] = [];
   private listeners = new Set<(e: HarnessEvent) => void>();
   private approvals = new Map<string, { approval: PendingApproval; resolve: (r: PermissionResult) => void }>();
@@ -141,6 +144,10 @@ class LiveSession {
   private async pump() {
     try {
       for await (const message of this.q) {
+        if (message.type === "system" && message.subtype === "init") {
+          this.model = message.model;
+          for (const w of this.modelWaiters.splice(0)) w(this.model);
+        }
         this.emit({ kind: "message", message });
         if (message.type === "result") this.setStatus("idle");
       }
@@ -172,6 +179,18 @@ class LiveSession {
         }
       });
       this.emit({ kind: "approval", approval });
+    });
+  }
+
+  /** Resolves with the model id once the CLI has started, or undefined after the timeout. */
+  whenModel(timeoutMs = 20_000): Promise<string | undefined> {
+    if (this.model) return Promise.resolve(this.model);
+    return new Promise((resolve) => {
+      const t = setTimeout(() => resolve(this.model), timeoutMs);
+      this.modelWaiters.push((m) => {
+        clearTimeout(t);
+        resolve(m);
+      });
     });
   }
 

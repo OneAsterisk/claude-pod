@@ -235,7 +235,7 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
         ? finalText || `Review posted for ${pr.key}.`
         : `Review of ${pr.key} did not complete: ${note ?? "unknown"}.${why ? `\nError: ${why}` : ""}${finalText ? `\nLast message: ${finalText.slice(0, 600)}` : ""}`;
       void reactInSlack(slackCtx.channel, slackCtx.ts, ok ? "white_check_mark" : "x");
-      void replyInSlack(slackCtx.channel, slackCtx.ts, text);
+      void replyInSlack(slackCtx.channel, slackCtx.ts, text, s.model);
     }
     // Stop the session so the process exits; the transcript stays on disk.
     sessions.getLive(s.sessionId)?.stop();
@@ -297,11 +297,16 @@ async function reactInSlack(channel: string, ts: string, name: string) {
   });
 }
 
-async function replyInSlack(channel: string, threadTs: string, text: string) {
+/** Every watcher message ends with this so recipients know it was automated and which model wrote it. */
+function footer(model?: string) {
+  return `\n\n_Sent with Claude${model ? ` · ${model}` : ""}_`;
+}
+
+async function replyInSlack(channel: string, threadTs: string, text: string, model?: string) {
   const token = slackToken();
   if (!token) return;
   // Keep the Slack reply short; the GitHub review carries the detail.
-  const trimmed = text.length > 2800 ? text.slice(0, 2800) + "\n…" : text;
+  const trimmed = (text.length > 2800 ? text.slice(0, 2800) + "\n…" : text) + footer(model);
   await slackApi("chat.postMessage", { channel, thread_ts: threadTs, text: trimmed, unfurl_links: "false" }, token).catch((err) =>
     log(`slack reply failed: ${err.message}`),
   );
@@ -345,7 +350,9 @@ async function pollSlack() {
         const started = startReview(pr, { kind: "slack", user: m.user, channel: m.channel?.id, ts, text });
         if (started) {
           await reactInSlack(m.channel?.id, ts, "eyes");
-          await replyInSlack(m.channel?.id, ts, `On it. Reviewing ${pr.key}; I'll reply here when the review is posted.`);
+          // Wait for the session's init message so the footer can name the model.
+          const model = await sessions.getLive(started.sessionId)?.whenModel();
+          await replyInSlack(m.channel?.id, ts, `On it. Reviewing ${pr.key}; I'll reply here when the review is posted.`, model);
         }
       }
     }
