@@ -147,7 +147,7 @@ The harness runs a watcher that starts `/pr-review` sessions on its own. Each re
 | A new push to an open PR in an allowed org that already has a "Claude review, round N" from your GitHub account | every 5 min | Starts a re-review (round N+1). Drafts are skipped unless the PR came in through Slack |
 | **Review now** in the Watcher tab | on click | Starts a review of the pasted link |
 
-Guard rails: only `github.com/<allowed owner>/...` links count, the watcher passes nothing but the URL and the trigger reason to Claude, at most 2 reviews run at once, and at most 30 start per day. Reviews run with `bypassPermissions` in `/workspace/general`; the skill clones each PR into its own scratch directory.
+Guard rails: only `github.com/<allowed owner>/...` links count, the watcher passes nothing but the URL and the trigger reason to Claude, at most 2 reviews run at once, and at most 30 start per day. Reviews run in permission mode `auto` (a classifier approves tool calls; the pod runs as root, which blocks `bypassPermissions`) in `/workspace/general`; the skill clones each PR into its own scratch directory.
 
 ### Slack setup (one time)
 

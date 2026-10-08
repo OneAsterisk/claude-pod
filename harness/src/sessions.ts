@@ -86,6 +86,8 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
 
 class LiveSession {
   status: LiveStatus = "running";
+  /** Last stderr output from the CLI, so a failed unattended run can report why. */
+  lastStderr = "";
   readonly events: HarnessEvent[] = [];
   private listeners = new Set<(e: HarnessEvent) => void>();
   private approvals = new Map<string, { approval: PendingApproval; resolve: (r: PermissionResult) => void }>();
@@ -115,7 +117,10 @@ class LiveSession {
         thinking: { type: "adaptive", display: "summarized" },
         canUseTool: (toolName, input, { signal, title }) =>
           this.requestApproval(toolName, input, title, signal),
-        stderr: (data) => console.error(`[${sessionId.slice(0, 8)}] ${data.trimEnd()}`),
+        stderr: (data) => {
+          this.lastStderr = (this.lastStderr + data).slice(-800);
+          console.error(`[${sessionId.slice(0, 8)}] ${data.trimEnd()}`);
+        },
       },
     });
     void this.pump();
