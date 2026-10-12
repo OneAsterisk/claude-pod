@@ -70,3 +70,13 @@
 - Use short paragraphs, headings, lists, and tables where they improve scanning.
 - Do not describe intent unless the code or repository explicitly establishes it.
 - Distinguish verified behavior from recommendations.
+
+## Review Standard
+
+Code should pass the `pr-review` gate on round 1: no Critical or High findings, fewer than 10 Medium plus Low.
+
+- Before opening or updating a PR, run `/pre-review` in a **fresh session** in the same worktree. Fix what it finds, rerun, then open the PR.
+- Prefer the smallest change that works. No abstractions with one call site, no config for two values, no new dependency a few lines would replace, no "might need later" generality.
+- Reuse existing helpers, stores, and utils before writing new ones. Two sources of truth is a Medium.
+- Every user-facing claim in the PR body must be true at head. Tests cover error paths, not just the happy path.
+- Security and correctness first: authz gated the way the server gates it, untrusted content escaped, mutations handle failure and refetch, dates respect timezone.

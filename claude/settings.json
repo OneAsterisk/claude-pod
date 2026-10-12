@@ -1,6 +1,6 @@
 {
-  "model": "claude-fable-5-1[1m]",
-  "effortLevel": "xhigh",
+  "model": "claude-opus-5-5",
+  "effortLevel": "high",
   "modelSettings": {
     "claude-sonnet-5": {
       "effortLevel": "high"

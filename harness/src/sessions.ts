@@ -104,6 +104,7 @@ class LiveSession {
     permissionMode: PermissionMode,
     resume: boolean,
     title?: string,
+    model?: string,
   ) {
     this.input.push(firstInput);
     this.q = query({
@@ -111,6 +112,8 @@ class LiveSession {
       options: {
         cwd,
         permissionMode,
+        // Omitted: the CLI uses the model from ~/.claude/settings.json.
+        ...(model ? { model } : {}),
         // Only honored for new sessions; resumed ones keep their saved title.
         ...(title && !resume ? { title } : {}),
         allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
@@ -224,6 +227,11 @@ class LiveSession {
     await this.q.setPermissionMode(mode);
   }
 
+  async setModel(model: string) {
+    await this.q.setModel(model);
+    this.model = model;
+  }
+
   stop() {
     this.input.close();
     this.q.close();
@@ -246,9 +254,10 @@ export function startSession(opts: {
   input: UserInput;
   permissionMode: PermissionMode;
   title?: string;
+  model?: string;
 }): LiveSession {
   const id = randomUUID();
-  const s = new LiveSession(id, opts.cwd, opts.input, opts.permissionMode, false, opts.title);
+  const s = new LiveSession(id, opts.cwd, opts.input, opts.permissionMode, false, opts.title, opts.model);
   live.set(id, s);
   return s;
 }
@@ -258,15 +267,17 @@ export async function sendToSession(
   sessionId: string,
   input: UserInput,
   permissionMode: PermissionMode,
+  model?: string,
 ): Promise<LiveSession> {
   const existing = live.get(sessionId);
   if (existing) {
+    if (model && model !== existing.model) await existing.setModel(model);
     existing.send(input);
     return existing;
   }
   const info = await getSessionInfo(sessionId);
   if (!info?.cwd) throw new Error("Session not found or has no working directory");
-  const s = new LiveSession(sessionId, info.cwd, input, permissionMode, true);
+  const s = new LiveSession(sessionId, info.cwd, input, permissionMode, true, undefined, model);
   live.set(sessionId, s);
   return s;
 }

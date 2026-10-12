@@ -91,6 +91,11 @@ function slackToken(): string | undefined {
   return process.env.SLACK_USER_TOKEN || loadEnvFile().SLACK_USER_TOKEN || undefined;
 }
 
+/** Model for review sessions; empty means the settings.json default. Re-read so watcher.env edits apply without a restart. */
+function reviewModel(): string | undefined {
+  return process.env.WATCHER_MODEL || loadEnvFile().WATCHER_MODEL || W.model || undefined;
+}
+
 /** Slack user IDs allowed to trigger reviews. Re-read each poll so the env file can be edited without a restart. */
 function allowedSlackUsers(): string[] {
   const raw = process.env.WATCHER_SLACK_USERS || loadEnvFile().WATCHER_SLACK_USERS;
@@ -224,6 +229,7 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
     input: { text },
     permissionMode: "auto",
     title: `PR review: ${pr.key}`,
+    model: reviewModel(),
   });
   // Manual re-runs of a PR that arrived via Slack still report back to that thread.
   const slackCtx = trigger.kind === "slack" ? { channel: trigger.channel, ts: trigger.ts } : pr.fromSlack;
@@ -504,6 +510,7 @@ export function status() {
     github: { intervalMs: W.githubIntervalMs, ...state.github },
     allowedOwners: W.allowedOwners,
     allowedSlackUsers: allowedSlackUsers(),
+    model: reviewModel() ?? "(settings default)",
     maxConcurrent: W.maxConcurrent,
     maxReviewsPerDay: W.maxReviewsPerDay,
     reviewsToday: state.reviewsToday,

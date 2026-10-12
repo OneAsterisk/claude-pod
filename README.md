@@ -181,7 +181,11 @@ Slack's API needs an app registration, but this one is only authorized for your 
 | `WATCHER_STATE_FILE` | `/workspace/watcher/state.json` | Tracked PRs, runs, and log |
 | `WATCHER_ENV_FILE` | `~/.config/claude-pod/watcher.env` | Where `SLACK_USER_TOKEN` is read from |
 
-The `pr-review` skill lives in `claude/skills/pr-review/` and is copied to `~/.claude/skills/` on every boot, so edit it in the repo.
+The `pr-review` and `pre-review` skills live in `claude/skills/` and are copied to `~/.claude/skills/` on every boot, so edit them in the repo. `/pre-review` runs the same rubric on the current branch before a PR exists, posts nothing, and must run in a fresh session (see "Review Standard" in `claude/CLAUDE.md`).
+
+### Models
+
+The default model for every session on the pod comes from `~/.claude/settings.json` (`claude-opus-5-5`). The harness lets you pick a model per session in the New session dialog and per message in the composer. Watcher reviews use the default unless `WATCHER_MODEL=<model id>` is set in the environment or in `watcher.env`.
 
 ## 5. Known risks
 

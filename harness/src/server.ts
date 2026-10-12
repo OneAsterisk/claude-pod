@@ -1,4 +1,5 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -20,6 +21,30 @@ const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "plan", "bypa
 
 function mode(value: unknown): PermissionMode {
   return MODES.includes(value as PermissionMode) ? (value as PermissionMode) : "default";
+}
+
+// Model ids the UI offers. Any `claude-*` id is accepted; this list is for the dropdown.
+const MODELS = [
+  { value: "claude-opus-5-5", label: "Opus 5.5" },
+  { value: "claude-opus-5-5[1m]", label: "Opus 5.5 (1M context)" },
+  { value: "claude-sonnet-5-5", label: "Sonnet 5.5" },
+  { value: "claude-fable-5-1", label: "Fable 5.1" },
+  { value: "claude-fable-5-1[1m]", label: "Fable 5.1 (1M context)" },
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+];
+
+function model(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  if (!/^claude-[a-z0-9.-]+(\[1m\])?$/i.test(value)) throw new HttpError(400, "Unknown model id");
+  return value;
+}
+
+function settingsDefaultModel(): string | undefined {
+  try {
+    return JSON.parse(readFileSync(path.join(config.home, ".claude", "settings.json"), "utf8")).model;
+  } catch {
+    return undefined;
+  }
 }
 
 function clientIp(c: Context): string {
@@ -166,8 +191,10 @@ app.get("/api/changes/file", async (c) => {
 
 app.get("/api/sessions", async (c) => c.json(await sessions.listAll()));
 
+app.get("/api/models", (c) => c.json({ models: MODELS, default: settingsDefaultModel() ?? null }));
+
 app.post("/api/sessions", async (c) => {
-  const b = await body<{ cwd: string; prompt: string; images?: unknown; permissionMode?: string; title?: string }>(c);
+  const b = await body<{ cwd: string; prompt: string; images?: unknown; permissionMode?: string; title?: string; model?: string }>(c);
   const input = userInput(b.prompt, b.images);
   await assertAllowedCwd(b.cwd);
   const s = sessions.startSession({
@@ -175,6 +202,7 @@ app.post("/api/sessions", async (c) => {
     input,
     permissionMode: mode(b.permissionMode),
     title: b.title?.trim() || undefined,
+    model: model(b.model),
   });
   return c.json({ sessionId: s.sessionId });
 });
@@ -218,8 +246,8 @@ app.get("/api/sessions/:id/events", (c) => {
 });
 
 app.post("/api/sessions/:id/messages", async (c) => {
-  const { text, images, permissionMode } = await body<{ text: string; images?: unknown; permissionMode?: string }>(c);
-  const s = await sessions.sendToSession(c.req.param("id"), userInput(text, images), mode(permissionMode));
+  const { text, images, permissionMode, model: m } = await body<{ text: string; images?: unknown; permissionMode?: string; model?: string }>(c);
+  const s = await sessions.sendToSession(c.req.param("id"), userInput(text, images), mode(permissionMode), model(m));
   return c.json({ sessionId: s.sessionId, live: s.status });
 });
 

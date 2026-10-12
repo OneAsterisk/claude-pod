@@ -81,6 +81,8 @@ function ago(ms) {
 }
 
 const state = {
+  models: [],
+  defaultModel: null,
   repos: [],
   sessions: [],
   selected: null,
@@ -108,6 +110,20 @@ function worktreeLabel(p) {
   }
   // Sessions from folders the harness does not manage: show just the tail of the path.
   return p ? p.split("/").filter(Boolean).slice(-2).join("/") : "unknown";
+}
+
+function modelOptions(selected) {
+  return [
+    el("option", { value: "" }, `Default${state.defaultModel ? ` (${state.defaultModel})` : ""}`),
+    ...state.models.map((m) => el("option", { value: m.value, selected: m.value === selected }, m.label)),
+  ];
+}
+
+async function loadModels() {
+  const data = await api("/api/models").catch(() => ({ models: [], default: null }));
+  state.models = data.models;
+  state.defaultModel = data.default;
+  $("#ns-model").replaceChildren(...modelOptions(""));
 }
 
 async function loadRepos() {
@@ -523,6 +539,7 @@ async function openSession(sessionId) {
         state.composerAtt.button,
         state.composerAtt.input,
         el("span", { style: "flex:1" }),
+        el("select", { id: "composer-model", title: "Model for the next message (switches a running session; sets the model when resuming)" }, ...modelOptions(meta?.model ?? "")),
         el(
           "select",
           { id: "composer-mode", title: "Permission mode (applies when resuming a session that is not running)" },
@@ -598,7 +615,7 @@ async function sendCurrent() {
   att.clear();
   try {
     const wasLive = $("#live-status")?.textContent === "running" || $("#live-status")?.textContent === "idle";
-    await post(`/api/sessions/${sessionId}/messages`, { text, images, permissionMode: $("#composer-mode").value });
+    await post(`/api/sessions/${sessionId}/messages`, { text, images, permissionMode: $("#composer-mode").value, model: $("#composer-model").value || undefined });
     setLiveStatus("running");
     if (!wasLive) connectEvents(sessionId, (e) => handleEvent(sessionId, e));
   } catch (e) {
@@ -669,6 +686,7 @@ $("#new-session-form").addEventListener("submit", async (e) => {
       images: nsAtt.images(),
       title: $("#ns-title").value,
       permissionMode: $("#ns-mode").value,
+      model: $("#ns-model").value || undefined,
     });
     $("#new-session").close();
     $("#ns-prompt").value = "";
@@ -919,6 +937,7 @@ async function loadWatcher() {
     card(`Slack DMs · every ${w.slack.intervalMs / 1000}s`, ...slackState),
     card(`GitHub · every ${w.github.intervalMs / 1000}s`, ...ghState),
     card("Limits", `${w.reviewsToday.count}/${w.maxReviewsPerDay} reviews today · max ${w.maxConcurrent} at once · orgs: ${w.allowedOwners.join(", ")}`),
+    card("Review model", w.model),
   );
 
   $("#wa-prs").replaceChildren(
@@ -1011,6 +1030,7 @@ function showView(name, { load = true } = {}) {
 
 for (const b of document.querySelectorAll("nav button")) b.addEventListener("click", () => showView(b.dataset.view));
 
+await loadModels();
 await loadRepos();
 await loadSessions();
 setInterval(() => loadSessions().catch(() => {}), 5000);
