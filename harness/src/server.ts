@@ -215,6 +215,8 @@ app.get("/api/sessions/:id", async (c) => {
     sessionId: id,
     messages,
     live: live?.status ?? null,
+    permissionMode: live?.permissionMode ?? null,
+    model: live?.model ?? null,
     approvals: live?.pendingApprovals() ?? [],
   });
 });

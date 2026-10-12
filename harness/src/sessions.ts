@@ -90,6 +90,8 @@ class LiveSession {
   lastStderr = "";
   /** Model id reported by the CLI's init message. */
   model?: string;
+  /** Current permission mode: from the init message, then updated by setPermissionMode. */
+  permissionMode: PermissionMode;
   private modelWaiters: ((m: string | undefined) => void)[] = [];
   readonly events: HarnessEvent[] = [];
   private listeners = new Set<(e: HarnessEvent) => void>();
@@ -106,6 +108,7 @@ class LiveSession {
     title?: string,
     model?: string,
   ) {
+    this.permissionMode = permissionMode;
     this.input.push(firstInput);
     this.q = query({
       prompt: this.input,
@@ -149,6 +152,7 @@ class LiveSession {
       for await (const message of this.q) {
         if (message.type === "system" && message.subtype === "init") {
           this.model = message.model;
+          this.permissionMode = message.permissionMode;
           for (const w of this.modelWaiters.splice(0)) w(this.model);
         }
         this.emit({ kind: "message", message });
@@ -225,6 +229,7 @@ class LiveSession {
 
   async setPermissionMode(mode: PermissionMode) {
     await this.q.setPermissionMode(mode);
+    this.permissionMode = mode;
   }
 
   async setModel(model: string) {
@@ -272,6 +277,7 @@ export async function sendToSession(
   const existing = live.get(sessionId);
   if (existing) {
     if (model && model !== existing.model) await existing.setModel(model);
+    if (permissionMode !== existing.permissionMode) await existing.setPermissionMode(permissionMode);
     existing.send(input);
     return existing;
   }
@@ -292,6 +298,8 @@ export async function listAll(limit = 200) {
   return [...fresh, ...sessions].map((s) => ({
     ...s,
     live: live.get(s.sessionId)?.status ?? null,
+    permissionMode: live.get(s.sessionId)?.permissionMode ?? null,
+    model: live.get(s.sessionId)?.model ?? null,
     pendingApprovals: live.get(s.sessionId)?.pendingApprovals().length ?? 0,
   }));
 }

@@ -542,8 +542,16 @@ async function openSession(sessionId) {
         el("select", { id: "composer-model", title: "Model for the next message (switches a running session; sets the model when resuming)" }, ...modelOptions(meta?.model ?? "")),
         el(
           "select",
-          { id: "composer-mode", title: "Permission mode (applies when resuming a session that is not running)" },
-          ...["default", "acceptEdits", "auto", "plan", "bypassPermissions"].map((m) => el("option", { value: m }, m)),
+          {
+            id: "composer-mode",
+            title: "Permission mode. Changes apply to a running session right away, and are used when resuming an idle one.",
+            onchange: async (e) => {
+              const live = $("#live-status")?.textContent;
+              if (live !== "running" && live !== "idle") return;
+              await post(`/api/sessions/${sessionId}/mode`, { permissionMode: e.target.value }).catch((err) => alert(err.message));
+            },
+          },
+          ...["default", "acceptEdits", "auto", "plan", "bypassPermissions"].map((m) => el("option", { value: m, selected: m === (meta?.permissionMode ?? "auto") }, m)),
         ),
         el("button", { class: "primary", onclick: sendCurrent }, "Send"),
       ),
@@ -567,6 +575,8 @@ async function openSession(sessionId) {
   for (const a of data.approvals) box.append(renderApproval(sessionId, a));
   box.scrollTop = box.scrollHeight;
   setLiveStatus(data.live);
+  if (data.permissionMode) $("#composer-mode").value = data.permissionMode;
+  if (data.model) $("#composer-model").value = data.model;
   historyLoaded = true;
   for (const e of buffered) handleEvent(sessionId, e);
 }
