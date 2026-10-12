@@ -933,9 +933,15 @@ async function loadWatcher() {
           p.running && el("span", { class: "badge running" }, "reviewing"),
           p.isDraft && el("span", { class: "badge idle" }, "draft"),
           p.skipReason && el("span", { class: "badge approval", title: "Reviews are skipped while the PR is in this state" }, p.skipReason),
+          p.muted && el("span", { class: "badge idle", title: "Pushes do not trigger re-reviews. Explicit requests still work." }, "muted"),
           p.fromSlack && el("span", { class: "badge approval" }, "from Slack"),
           el("span", { class: "sha" }, `head ${p.headSha?.slice(0, 8) ?? "?"} · last Claude round ${p.lastClaudeRoundSha ? p.lastClaudeRoundSha.slice(0, 8) : "none"}`),
           el("button", { onclick: () => reviewNow(p.url) }, "Review now"),
+          el(
+            "button",
+            { onclick: () => post("/api/watcher/watch", { pr: p.key, watching: !!p.muted }).then(loadWatcher).catch((e) => alert(e.message)) },
+            p.muted ? "Resume auto re-review" : "Stop auto re-review",
+          ),
         ),
         p.runs.length > 0 &&
           el(

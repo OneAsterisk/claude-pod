@@ -274,6 +274,15 @@ app.post("/api/watcher/review", async (c) => {
 
 app.post("/api/watcher/poll", async (c) => c.json(await watcher.pollNow()));
 
+app.post("/api/watcher/watch", async (c) => {
+  const { pr, watching } = await body<{ pr: string; watching: boolean }>(c);
+  try {
+    return c.json(watcher.setWatching(pr ?? "", !!watching));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+});
+
 // ---- Frontend ----
 
 // Always revalidate, so a restart with new frontend code is picked up on reload.

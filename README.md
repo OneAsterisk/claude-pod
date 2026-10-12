@@ -146,6 +146,7 @@ The harness runs a watcher that starts `/pr-review` sessions on its own. Each re
 | A Slack DM containing "Watcher, review <PR link>" (or "Watcher, please review") from a user on the allowlist | every 60s | Starts a review and replies in the Slack thread when it is posted |
 | A new push to an open PR in an allowed org that already has a "Claude review, round N" from your GitHub account | every 5 min | Starts a re-review (round N+1). Drafts are skipped unless the PR came in through Slack |
 | **Review now** in the Watcher tab | on click | Starts a review of the pasted link |
+| A Slack DM `Watcher, stop <PR link>` (or `ignore`/`mute`/`unwatch`), or **Stop auto re-review** in the Watcher tab | immediate | Mutes the PR: pushes no longer trigger re-reviews. `Watcher, resume <PR link>` or **Resume auto re-review** turns it back on. Explicit review requests still work while muted |
 
 Skipped PRs: merged or closed, queued in a merge queue, auto-merge enabled, ready to merge (approved with checks passing), or labeled `ready to merge` / `do not review`. The sender gets a one-line Slack reply saying why.
 

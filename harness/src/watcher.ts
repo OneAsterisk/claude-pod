@@ -31,6 +31,9 @@ type TrackedPr = {
   isDraft?: boolean;
   /** Set when the PR is in a state that should not be reviewed (merged, queued, ready to merge, ...). */
   skipReason?: string;
+  /** Muted PRs are not re-reviewed on push. Explicit Slack or manual requests still run. */
+  muted?: boolean;
+  mutedAt?: number;
   runs: Run[];
 };
 
@@ -69,6 +72,9 @@ type State = {
 const W = config.watcher;
 // "Watcher, please review", "Watcher review", "watcher: please review" all count.
 const TRIGGER_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?review\b/i;
+// "Watcher, stop <link>" mutes automatic re-reviews; "Watcher, resume <link>" turns them back on.
+const STOP_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?(?:stop|ignore|mute|unwatch)\b/i;
+const RESUME_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?(?:resume|unmute|watch again|rewatch)\b/i;
 const PR_URL_RE = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/gi;
 
 function loadEnvFile(): Record<string, string> {
@@ -368,7 +374,8 @@ async function pollSlack() {
       if (Number(ts) > Number(newest)) newest = ts;
       state.slack.seen.push(ts);
       const text: string = m.text ?? "";
-      if (!TRIGGER_RE.test(text)) continue;
+      const command = STOP_RE.test(text) ? "stop" : RESUME_RE.test(text) ? "resume" : TRIGGER_RE.test(text) ? "review" : null;
+      if (!command) continue;
       if (!allowedSlackUsers().includes(m.user)) {
         log(`slack: trigger from ${m.user} ignored (not on allowlist)`);
         continue;
@@ -376,6 +383,21 @@ async function pollSlack() {
       const prs = extractPrUrls(text);
       if (!prs.length) {
         await replyInSlack(m.channel?.id, ts, `No github.com PR link in an allowed org (${W.allowedOwners.join(", ")}) found in that message.`);
+        continue;
+      }
+      if (command !== "review") {
+        for (const p of prs) {
+          const pr = setMuted(track(p), command === "stop");
+          log(`${pr.key}: ${pr.muted ? "muted" : "unmuted"} via Slack by ${m.user}`);
+          await reactInSlack(m.channel?.id, ts, pr.muted ? "no_bell" : "bell");
+          await replyInSlack(
+            m.channel?.id,
+            ts,
+            pr.muted
+              ? `Stopped watching ${pr.key}. New pushes won't trigger re-reviews. Say "Watcher, resume <link>" to turn it back on; "Watcher, review <link>" still works any time.`
+              : `Watching ${pr.key} again. New pushes will trigger re-reviews.`,
+          );
+        }
         continue;
       }
       for (const p of prs) {
@@ -455,7 +477,7 @@ async function pollGithub() {
         log(`${pr.key}: refresh failed: ${err.message}`);
         return "UNKNOWN";
       });
-      if (prState !== "OPEN" || pr.skipReason) continue;
+      if (prState !== "OPEN" || pr.skipReason || pr.muted) continue;
       if (!pr.lastClaudeRoundSha) continue; // No Claude round yet: nothing to re-review.
       if (pr.isDraft && !pr.fromSlack) continue; // Skill rule: skip drafts unless sent directly.
       if (!pr.headSha || pr.headSha === pr.lastClaudeRoundSha) continue;
@@ -490,6 +512,23 @@ export function status() {
       .sort((a, b) => (b.runs.at(-1)?.startedAt ?? 0) - (a.runs.at(-1)?.startedAt ?? 0)),
     log: state.log.slice(-50).reverse(),
   };
+}
+
+function setMuted(pr: TrackedPr, muted: boolean): TrackedPr {
+  pr.muted = muted;
+  pr.mutedAt = muted ? Date.now() : undefined;
+  saveState();
+  return pr;
+}
+
+/** Mute or unmute automatic re-reviews for a PR, by URL or owner/repo#n key. */
+export function setWatching(target: string, watching: boolean) {
+  const [p] = extractPrUrls(target);
+  const pr = p ? track(p) : Object.values(state.prs).find((x) => x.key === target);
+  if (!pr) throw new Error(`Unknown PR: ${target}`);
+  setMuted(pr, !watching);
+  log(`${pr.key}: ${pr.muted ? "muted" : "unmuted"} from the harness`);
+  return { pr: pr.key, muted: !!pr.muted };
 }
 
 export async function reviewNow(url: string) {
