@@ -14,7 +14,7 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 gh auth setup-git
 
-for repo in runpod/main-ui runpod/RunPod; do
+for repo in runpod/main-ui runpod/RunPod runpod/runpod-mcp; do
   dest="$REPOS_DIR/$(basename "$repo")"
   if [ -d "$dest/.git" ]; then
     echo "ok: $repo already cloned"

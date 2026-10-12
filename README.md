@@ -1,6 +1,6 @@
 # claude-pod
 
-A Runpod CPU pod running Claude Code for `runpod/main-ui` and `runpod/RunPod`. It includes a password-protected web harness for listing, viewing, and starting sessions.
+A Runpod CPU pod running Claude Code for `runpod/main-ui`, `runpod/RunPod`, and `runpod/runpod-mcp`. It includes a password-protected web harness for listing, viewing, and starting sessions.
 
 | Path | What it is |
 |---|---|
