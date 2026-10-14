@@ -150,7 +150,7 @@ The harness runs a watcher that starts `/pr-review` sessions on its own. Each re
 
 Skipped PRs: merged or closed, queued in a merge queue, auto-merge enabled, ready to merge (approved with checks passing), or labeled `ready to merge` / `do not review`. The sender gets a one-line Slack reply saying why.
 
-Guard rails: only `github.com/<allowed owner>/...` links count, the watcher passes nothing but the URL and the trigger reason to Claude, at most 2 reviews run at once, and at most 30 start per day. Reviews run in permission mode `auto` (a classifier approves tool calls; the pod runs as root, which blocks `bypassPermissions`) in `/workspace/general`; the skill clones each PR into its own scratch directory.
+Guard rails: only `github.com/<allowed owner>/...` links count, the watcher passes nothing but the URL and the trigger reason to Claude, at most 10 reviews run at once, and at most 100 start per day. Reviews run in permission mode `auto` (a classifier approves tool calls; the pod runs as root, which blocks `bypassPermissions`) in `/workspace/general`; the skill clones each PR into its own scratch directory.
 
 ### Slack setup (one time)
 
@@ -176,8 +176,8 @@ Slack's API needs an app registration, but this one is only authorized for your 
 | `WATCHER_GITHUB_INTERVAL_MS` | `300000` | GitHub poll interval |
 | `WATCHER_ALLOWED_OWNERS` | `runpod` | Comma-separated GitHub owners whose PRs may be reviewed |
 | `WATCHER_SLACK_USERS` | `U0BS304GAN6` | Comma-separated Slack user IDs allowed to trigger. Also read from `watcher.env` on every poll, so edits there apply without a restart |
-| `WATCHER_MAX_CONCURRENT` | `2` | Reviews running at once |
-| `WATCHER_MAX_PER_DAY` | `30` | Reviews started per day |
+| `WATCHER_MAX_CONCURRENT` | `10` | Reviews running at once. Also read from `watcher.env` on each poll |
+| `WATCHER_MAX_PER_DAY` | `100` | Reviews started per day. Also read from `watcher.env` on each poll |
 | `WATCHER_STATE_FILE` | `/workspace/watcher/state.json` | Tracked PRs, runs, and log |
 | `WATCHER_ENV_FILE` | `~/.config/claude-pod/watcher.env` | Where `SLACK_USER_TOKEN` is read from |
 

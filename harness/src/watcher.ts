@@ -91,6 +91,16 @@ function slackToken(): string | undefined {
   return process.env.SLACK_USER_TOKEN || loadEnvFile().SLACK_USER_TOKEN || undefined;
 }
 
+/** Concurrency and daily limits, overridable in watcher.env without a restart. */
+function limits() {
+  const env = loadEnvFile();
+  const num = (v: string | undefined, fallback: number) => (v && Number.isFinite(Number(v)) ? Number(v) : fallback);
+  return {
+    maxConcurrent: num(process.env.WATCHER_MAX_CONCURRENT || env.WATCHER_MAX_CONCURRENT, W.maxConcurrent),
+    maxReviewsPerDay: num(process.env.WATCHER_MAX_PER_DAY || env.WATCHER_MAX_PER_DAY, W.maxReviewsPerDay),
+  };
+}
+
 /** Model for review sessions; empty means the settings.json default. Re-read so watcher.env edits apply without a restart. */
 function reviewModel(): string | undefined {
   return process.env.WATCHER_MODEL || loadEnvFile().WATCHER_MODEL || W.model || undefined;
@@ -115,6 +125,11 @@ let state: State = emptyState();
 function loadState() {
   try {
     if (existsSync(W.stateFile)) state = { ...emptyState(), ...JSON.parse(readFileSync(W.stateFile, "utf8")) };
+    // Older builds stored a broken jq template instead of the sha; drop anything that is not a sha.
+    for (const pr of Object.values(state.prs)) {
+      if (pr.lastClaudeRoundSha && !/^[0-9a-f]{40}$/.test(pr.lastClaudeRoundSha)) pr.lastClaudeRoundSha = null;
+      if (pr.lastClaudeRoundAt && Number.isNaN(Date.parse(pr.lastClaudeRoundAt))) pr.lastClaudeRoundAt = null;
+    }
   } catch (err) {
     console.error("watcher: could not read state, starting fresh", err);
   }
@@ -165,7 +180,7 @@ function runningCount(): number {
 function underDailyCap(): boolean {
   const day = new Date().toISOString().slice(0, 10);
   if (state.reviewsToday.day !== day) state.reviewsToday = { day, count: 0 };
-  return state.reviewsToday.count < W.maxReviewsPerDay;
+  return state.reviewsToday.count < limits().maxReviewsPerDay;
 }
 
 async function gh(args: string[]): Promise<string> {
@@ -190,12 +205,13 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
     log(`${pr.key}: review already running, skipped`);
     return null;
   }
-  if (runningCount() >= W.maxConcurrent) {
-    log(`${pr.key}: ${W.maxConcurrent} reviews already running, will retry next poll`);
+  const { maxConcurrent, maxReviewsPerDay } = limits();
+  if (runningCount() >= maxConcurrent) {
+    log(`${pr.key}: ${maxConcurrent} reviews already running, will retry next poll`);
     return null;
   }
   if (!underDailyCap()) {
-    log(`${pr.key}: daily cap of ${W.maxReviewsPerDay} reviews reached, skipped`);
+    log(`${pr.key}: daily cap of ${maxReviewsPerDay} reviews reached, skipped`);
     return null;
   }
 
@@ -257,7 +273,8 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
       await refreshPr(pr);
       // A round submitted since this run began counts, even if the author pushed again after it.
       return !!pr.lastClaudeRoundAt && Date.parse(pr.lastClaudeRoundAt) >= startedAt - 60_000;
-    } catch {
+    } catch (err) {
+      log(`${pr.key}: posted-review check failed: ${(err as Error).message.split("\n")[0]}`);
       return false;
     }
   };
@@ -456,11 +473,11 @@ async function refreshPr(pr: TrackedPr) {
     `repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`,
     "--paginate",
     "--jq",
-    `[.[] | select(.user.login == "${me}" and (.body | test("Claude review, round")))] | sort_by(.submitted_at) | last | "\(.commit_id) \(.submitted_at)"`,
+    `[.[] | select(.user.login == "${me}" and (.body | test("Claude review, round")))] | sort_by(.submitted_at) | last | ((.commit_id // "") + " " + (.submitted_at // ""))`,
   ]);
   const [sha, at] = rounds.trim().split(" ");
-  pr.lastClaudeRoundSha = sha || null;
-  pr.lastClaudeRoundAt = at || null;
+  pr.lastClaudeRoundSha = /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  pr.lastClaudeRoundAt = at && !Number.isNaN(Date.parse(at)) ? at : null;
   return view.state as string;
 }
 
@@ -511,8 +528,8 @@ export function status() {
     allowedOwners: W.allowedOwners,
     allowedSlackUsers: allowedSlackUsers(),
     model: reviewModel() ?? "(settings default)",
-    maxConcurrent: W.maxConcurrent,
-    maxReviewsPerDay: W.maxReviewsPerDay,
+    maxConcurrent: limits().maxConcurrent,
+    maxReviewsPerDay: limits().maxReviewsPerDay,
     reviewsToday: state.reviewsToday,
     prs: Object.values(state.prs)
       .map((p) => ({ ...p, running: !!running(p) }))

@@ -35,8 +35,8 @@ export const config = {
     githubIntervalMs: Number(process.env.WATCHER_GITHUB_INTERVAL_MS ?? 300_000),
     allowedOwners: (process.env.WATCHER_ALLOWED_OWNERS ?? "runpod").split(",").map((o) => o.trim().toLowerCase()).filter(Boolean),
     allowedSlackUsers: (process.env.WATCHER_SLACK_USERS ?? "U0BS304GAN6").split(",").map((u) => u.trim()).filter(Boolean),
-    maxConcurrent: Number(process.env.WATCHER_MAX_CONCURRENT ?? 2),
-    maxReviewsPerDay: Number(process.env.WATCHER_MAX_PER_DAY ?? 30),
+    maxConcurrent: Number(process.env.WATCHER_MAX_CONCURRENT ?? 10),
+    maxReviewsPerDay: Number(process.env.WATCHER_MAX_PER_DAY ?? 100),
     // Model for review sessions. Empty = the default from ~/.claude/settings.json.
     model: process.env.WATCHER_MODEL ?? "",
     // A review is done only when the GitHub review exists at the PR head. These bound the wait.
