@@ -13,7 +13,7 @@
     }
   },
   "theme": "dark",
-  "tui": "fullscreen",
+  "tui": "default",
   "skipDangerousModePermissionPrompt": true,
   "enabledPlugins": {
     "i-have-adhd@i-have-adhd": true,
