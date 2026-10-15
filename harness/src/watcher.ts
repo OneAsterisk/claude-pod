@@ -254,6 +254,16 @@ function startReview(pr: TrackedPr, trigger: Trigger): Run | null {
   if (pr.runs.length > 20) pr.runs.splice(0, pr.runs.length - 20);
   pr.lastTriggeredSha = pr.headSha;
   state.reviewsToday.count++;
+  // A push-triggered re-review on a PR that arrived via Slack: mark the original
+  // message and say so in its thread, so the requester knows why a new result is coming.
+  if (trigger.kind === "github" && slackCtx) {
+    const head = trigger.headSha.slice(0, 8);
+    void (async () => {
+      await reactInSlack(slackCtx.channel, slackCtx.ts, "repeat");
+      const model = await s.whenModel();
+      await replyInSlack(slackCtx.channel, slackCtx.ts, `New push to ${pr.key} (head \`${head}\`). Re-reviewing now; I'll reply here with the result.`, model);
+    })();
+  }
   log(`${pr.key}: started review session ${s.sessionId.slice(0, 8)} (${trigger.kind})`);
   saveState();
 
