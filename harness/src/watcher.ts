@@ -125,10 +125,18 @@ let state: State = emptyState();
 function loadState() {
   try {
     if (existsSync(W.stateFile)) state = { ...emptyState(), ...JSON.parse(readFileSync(W.stateFile, "utf8")) };
-    // Older builds stored a broken jq template instead of the sha; drop anything that is not a sha.
     for (const pr of Object.values(state.prs)) {
+      // Older builds stored a broken jq template instead of the sha; drop anything that is not a sha.
       if (pr.lastClaudeRoundSha && !/^[0-9a-f]{40}$/.test(pr.lastClaudeRoundSha)) pr.lastClaudeRoundSha = null;
       if (pr.lastClaudeRoundAt && Number.isNaN(Date.parse(pr.lastClaudeRoundAt))) pr.lastClaudeRoundAt = null;
+      // Runs that were in flight when the harness last stopped can never finish; close them out.
+      for (const r of pr.runs) {
+        if (!r.endedAt) {
+          r.endedAt = Date.now();
+          r.ok = false;
+          r.summary = r.summary || "The harness restarted before this run finished.";
+        }
+      }
     }
   } catch (err) {
     console.error("watcher: could not read state, starting fresh", err);
