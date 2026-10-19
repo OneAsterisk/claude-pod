@@ -9,7 +9,16 @@ Review the current branch the way the `pr-review` skill will review the PR, so t
 
 ## 0. Fresh context, or stop
 
-This skill only works from a session that did not write the code. Same-session review shares the author's blind spots. If this session has edited any of the files in the diff, say so and stop with: "Start a new session in this worktree and run `/pre-review` there."
+This skill only works from a context that did not write the code. Same-session review shares the author's blind spots. If this session has edited any of the files in the diff, do not review here. Run the review as a subagent with fresh context instead (Agent tool, `general-purpose`, cwd set to this worktree) with this prompt, then relay its report verbatim and fix what it found:
+
+```
+Read ~/.claude/skills/pre-review/SKILL.md and follow it exactly for the git worktree at <absolute path>.
+You did not write this code, so section 0 passes. Read-only: do not edit files, post to GitHub, or run builds or tests.
+You cannot launch agents, so skip the section 3 fan-out and do the three passes yourself.
+Reply with the section 6 report only.
+```
+
+If the Agent tool is not available, say so and stop with: "Start a new session in this worktree and run `/pre-review` there."
 
 ## 1. Gather
 
@@ -38,7 +47,7 @@ Launch these in parallel with the diff path, the repo rules, and the instruction
 2. **Duplication, simplification, over-engineering**: duplication inside the diff and with existing helpers in the repo, exports nobody imports, abstractions with one call site, config for two values, new dependencies that a few lines would replace, components or functions over 200 lines, speculative generality ("might need later"), comments that restate code, TODOs without tickets.
 3. **Tests, conventions, UX**: what each test file covers and misses (error paths, mappers, stores, timezone-dependent dates, tautological tests), convention violations from the repo rules, accessibility of new UI, copy quality.
 
-Skip the agents for small diffs and do the three passes yourself.
+Skip the agents for small diffs, or when you are the subagent, and do the three passes yourself.
 
 ## 4. Verify before you report
 
@@ -85,7 +94,10 @@ Nits never count. A CI check you can predict will fail counts as High.
 <What you checked and found fine.>
 
 ### Next
-<"Fix the N items above, then rerun /pre-review in a fresh session" or "Gate passes. Open the PR; expect round 1 to be nits.">
+<One of:
+"Fix the N items above, then rerun /pre-review in a fresh context." (any Critical/High/Medium/Low)
+"Fix the nits, then open the draft PR." (nits only)
+"No findings. Open the draft PR." (nothing)>
 ```
 
 Keep it under ~1,000 words. Evidence goes in the finding lines, not in prose.
