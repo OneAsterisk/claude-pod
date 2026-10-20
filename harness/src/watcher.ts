@@ -75,7 +75,7 @@ const TRIGGER_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?review\b/i;
 // "Watcher, stop <link>" mutes automatic re-reviews; "Watcher, resume <link>" turns them back on.
 const STOP_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?(?:stop|ignore|mute|unwatch)\b/i;
 const RESUME_RE = /\bwatcher\b[,:]?\s*(?:please\s+)?(?:resume|unmute|watch again|rewatch)\b/i;
-const PR_URL_RE = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/gi;
+const PR_URL_RE = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:pull|issues)\/(\d+)/gi;
 
 function loadEnvFile(): Record<string, string> {
   if (!existsSync(W.envFile)) return {};
