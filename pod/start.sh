@@ -53,8 +53,9 @@ if ! grep -q "claude-pod" "$HOME/.bashrc" 2>/dev/null; then
   cat >> "$HOME/.bashrc" <<'EOF'
 # claude-pod
 [ -f /etc/rp_environment ] && . /etc/rp_environment
-# Optional API key (ANTHROPIC_API_KEY=...) so pod usage bills the key, not the subscription.
-[ -f "$HOME/.config/claude-pod/anthropic.env" ] && set -a && . "$HOME/.config/claude-pod/anthropic.env" && set +a
+# Secrets kept on the volume as KEY=value files: anthropic.env (ANTHROPIC_API_KEY, bills the key
+# instead of the subscription), npm.env (NPM_TOKEN for main-ui, NODE_AUTH_TOKEN for RunPod), ...
+for f in "$HOME"/.config/claude-pod/*.env; do [ "$(basename "$f")" = watcher.env ] && continue; [ -f "$f" ] && set -a && . "$f" && set +a; done
 # Subscription-billed session with the claude.ai connectors (Slack needs this; its MCP server has no standalone OAuth).
 alias claude-sub='env -u ANTHROPIC_API_KEY claude'
 export PATH="$HOME/.local/bin:$PATH"
@@ -118,7 +119,7 @@ cd "$POD_REPO/harness"
 mise exec -- npm ci --silent
 if ! tmux has-session -t harness 2>/dev/null; then
   tmux new-session -d -s harness \
-    "cd '$POD_REPO/harness' && { [ -f '$HOME/.config/claude-pod/anthropic.env' ] && set -a && . '$HOME/.config/claude-pod/anthropic.env' && set +a; }; HOME='$HOME' mise exec -- npm start 2>&1 | tee -a /workspace/harness.log"
+    "cd '$POD_REPO/harness' && for f in '$HOME'/.config/claude-pod/*.env; do case \$f in */watcher.env) ;; *) [ -f \"\$f\" ] && set -a && . \"\$f\" && set +a;; esac; done; HOME='$HOME' mise exec -- npm start 2>&1 | tee -a /workspace/harness.log"
 fi
 
 echo "=== boot done $(date -Is) ==="
