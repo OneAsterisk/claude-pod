@@ -12,6 +12,8 @@ if ! gh auth status >/dev/null 2>&1; then
   echo "WARN: gh is not signed in. Run 'gh auth login', then: bash /workspace/claude-pod/pod/clone-repos.sh"
   exit 0
 fi
+# `gh auth login --with-token` records ssh as the host protocol, which has no known host key here.
+gh config set -h github.com git_protocol https
 gh auth setup-git
 
 for repo in runpod/main-ui runpod/RunPod runpod/runpod-mcp; do
