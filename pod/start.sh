@@ -119,7 +119,7 @@ cd "$POD_REPO/harness"
 mise exec -- npm ci --silent
 if ! tmux has-session -t harness 2>/dev/null; then
   tmux new-session -d -s harness \
-    "cd '$POD_REPO/harness' && for f in '$HOME'/.config/claude-pod/*.env; do case \$f in */watcher.env) ;; *) [ -f \"\$f\" ] && set -a && . \"\$f\" && set +a;; esac; done; HOME='$HOME' mise exec -- npm start 2>&1 | tee -a /workspace/harness.log"
+    "HOME='$HOME' bash '$POD_REPO/pod/run-harness.sh' 2>&1 | tee -a /workspace/harness.log"
 fi
 
 echo "=== boot done $(date -Is) ==="
