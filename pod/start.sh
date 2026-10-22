@@ -55,6 +55,8 @@ if ! grep -q "claude-pod" "$HOME/.bashrc" 2>/dev/null; then
 [ -f /etc/rp_environment ] && . /etc/rp_environment
 # Optional API key (ANTHROPIC_API_KEY=...) so pod usage bills the key, not the subscription.
 [ -f "$HOME/.config/claude-pod/anthropic.env" ] && set -a && . "$HOME/.config/claude-pod/anthropic.env" && set +a
+# Subscription-billed session with the claude.ai connectors (Slack needs this; its MCP server has no standalone OAuth).
+alias claude-sub='env -u ANTHROPIC_API_KEY claude'
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(mise activate bash)"
 cd /workspace
