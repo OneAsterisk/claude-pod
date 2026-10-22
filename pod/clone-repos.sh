@@ -16,7 +16,7 @@ fi
 gh config set -h github.com git_protocol https
 gh auth setup-git
 
-for repo in runpod/main-ui runpod/RunPod runpod/runpod-mcp; do
+for repo in runpod/main-ui runpod/RunPod runpod/runpod-mcp runpod/runpodctl; do
   dest="$REPOS_DIR/$(basename "$repo")"
   if [ -d "$dest/.git" ]; then
     echo "ok: $repo already cloned"
