@@ -537,6 +537,13 @@ async function pollGithub() {
 
 // ---- Public API ----
 
+/** sessionId -> PR key for every review run the watcher has started. */
+export function reviewSessions(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of Object.values(state.prs)) for (const r of p.runs) out.set(r.sessionId, p.key);
+  return out;
+}
+
 export function status() {
   return {
     enabled: W.enabled,

@@ -226,31 +226,53 @@ async function loadSessions() {
   renderSessionList();
 }
 
-function renderSessionList() {
-  const filter = $("#repo-filter").value;
-  const items = state.sessions.filter(
-    (s) => !filter || (filter === "__general" ? s.cwd === state.generalDir : repoForPath(s.cwd) === filter),
-  );
-  $("#session-list").replaceChildren(
-    ...items.map((s) =>
-      el(
-        "li",
-        { class: s.sessionId === state.selected ? "selected" : "", onclick: () => openSession(s.sessionId) },
-        el("div", { class: "title" }, s.customTitle || s.summary || s.firstPrompt || s.sessionId),
-        el(
-          "div",
-          { class: "meta" },
-          el("span", {}, worktreeLabel(s.cwd)),
-          el("span", {}, ago(s.lastModified)),
-          s.live && el("span", { class: `badge ${s.live}` }, s.live),
-          s.pendingApprovals > 0 && el("span", { class: "badge approval" }, `${s.pendingApprovals} approval`),
-        ),
-      ),
+function sessionTitle(s) {
+  return s.customTitle || s.summary || s.firstPrompt || s.sessionId;
+}
+
+function sessionItem(s, label) {
+  return el(
+    "li",
+    { class: s.sessionId === state.selected ? "selected" : "", onclick: () => (showView("sessions"), openSession(s.sessionId)) },
+    el("div", { class: "title" }, sessionTitle(s)),
+    el(
+      "div",
+      { class: "meta" },
+      el("span", {}, label),
+      el("span", {}, ago(s.lastModified)),
+      s.live && el("span", { class: `badge ${s.live}` }, s.live),
+      s.pendingApprovals > 0 && el("span", { class: "badge approval" }, `${s.pendingApprovals} approval`),
     ),
   );
 }
 
+function matchesSearch(s, q) {
+  return !q || [sessionTitle(s), s.summary, s.firstPrompt, s.cwd, s.sessionId].some((v) => v && v.toLowerCase().includes(q));
+}
+
+function renderSessionList() {
+  const filter = $("#repo-filter").value;
+  const q = $("#session-search").value.trim().toLowerCase();
+  // Watcher review sessions live under the Watcher tab; keep one here only while it is open.
+  const items = state.sessions.filter(
+    (s) =>
+      (!s.review || s.sessionId === state.selected) &&
+      (!filter || (filter === "__general" ? s.cwd === state.generalDir : repoForPath(s.cwd) === filter)) &&
+      matchesSearch(s, q),
+  );
+  $("#session-list").replaceChildren(...items.map((s) => sessionItem(s, worktreeLabel(s.cwd))));
+  if (!items.length) $("#session-list").append(el("li", { class: "meta" }, q ? "No sessions match." : "No sessions yet."));
+  renderReviewSessions();
+}
+
+function renderReviewSessions() {
+  const items = state.sessions.filter((s) => s.review).slice(0, 50);
+  $("#wa-sessions").replaceChildren(...items.map((s) => sessionItem(s, s.review)));
+  if (!items.length) $("#wa-sessions").append(el("li", { class: "meta" }, "No review sessions yet."));
+}
+
 $("#repo-filter").addEventListener("change", renderSessionList);
+$("#session-search").addEventListener("input", renderSessionList);
 
 // ---------- Image attachments ----------
 

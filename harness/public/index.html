@@ -26,6 +26,7 @@
         <div class="toolbar">
           <select id="repo-filter"><option value="">All repos</option></select>
           <button id="new-session-btn" class="primary">New session</button>
+          <input id="session-search" type="search" placeholder="Search sessions" aria-label="Search sessions">
         </div>
         <ul id="session-list" class="list"></ul>
       </aside>
@@ -81,6 +82,8 @@
       <div id="wa-status" class="wa-status"></div>
       <h3>Tracked pull requests</h3>
       <div id="wa-prs"></div>
+      <h3>Review sessions</h3>
+      <ul id="wa-sessions" class="list"></ul>
       <h3>Recent activity</h3>
       <ul id="wa-log" class="wa-log"></ul>
     </section>

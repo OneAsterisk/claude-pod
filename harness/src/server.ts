@@ -189,7 +189,20 @@ app.get("/api/changes/file", async (c) => {
 
 // ---- Sessions ----
 
-app.get("/api/sessions", async (c) => c.json(await sessions.listAll()));
+const REVIEW_TITLE = "PR review: ";
+const reviewFromTitle = (title?: string) => (title?.startsWith(REVIEW_TITLE) ? title.slice(REVIEW_TITLE.length) : null);
+
+app.get("/api/sessions", async (c) => {
+  const reviews = watcher.reviewSessions();
+  const all = await sessions.listAll();
+  // `review` names the PR a watcher session reviewed, so the UI can list it under Watcher instead of Sessions.
+  return c.json(
+    all.map((s) => ({
+      ...s,
+      review: reviews.get(s.sessionId) ?? reviewFromTitle((s as { customTitle?: string }).customTitle),
+    })),
+  );
+});
 
 app.get("/api/models", (c) => c.json({ models: MODELS, default: settingsDefaultModel() ?? null }));
 

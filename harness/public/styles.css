@@ -176,6 +176,9 @@ label.inline { display: flex; gap: 6px; align-items: center; color: var(--muted)
 .wa-pr .runs { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
 .wa-pr .runs li { padding: 3px 0; border-top: 1px solid var(--border); }
 .wa-pr .runs a { color: var(--accent-soft); }
+#view-sessions .toolbar input[type="search"] { flex: 1 1 140px; }
+#wa-sessions { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); overflow: hidden; }
+#wa-sessions li:last-child { border-bottom: 0; }
 .wa-log { list-style: none; margin: 0; padding: 0; font-size: 12px; font-family: ui-monospace, monospace; }
 .wa-log li { padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--muted); display: flex; gap: 10px; }
 .wa-log li time { flex: none; color: #5a5670; }
