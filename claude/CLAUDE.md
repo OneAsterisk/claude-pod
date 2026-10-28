@@ -89,10 +89,11 @@ Code should pass the `pr-review` gate on round 1: no Critical or High findings, 
 ### Session workflow (every session that edits code)
 
 1. **Goal first.** Before editing anything, write one line: `Goal: <what done looks like>`. If the request does not say what done looks like, ask one question, then write it. Check every later step against that line.
-2. **Write the code.** Smallest change that meets the goal.
-3. **Pre-review in a fresh context.** Run `/pre-review` as a subagent (the skill has the prompt) or in a new session in the same worktree. Never review in the context that wrote the code.
-4. **Fix every finding** (Critical, High, Medium, Low, and nits that take a line). Then go back to step 3.
-5. **Done means a pre-review round with no findings.** Only then open the draft PR. After three rounds that still have findings, stop and show the user what remains instead of looping.
+2. **Conventions brief.** Run `/conventions` as a subagent for this repo and the area you will touch, before writing anything. It reads the repo's written rules and the neighboring code and returns a short brief: files to imitate, naming, layout, helpers to reuse, anti-patterns. Write to that brief.
+3. **Write the code.** Smallest change that meets the goal, in the shape the brief describes.
+4. **Pre-review in a fresh context.** Run `/pre-review` as a subagent (the skill has the prompt) or in a new session in the same worktree. Never review in the context that wrote the code.
+5. **Fix every finding** (Critical, High, Medium, Low, and nits that take a line). Then go back to step 4.
+6. **Done means a pre-review round with no findings.** Only then open the draft PR. After three rounds that still have findings, stop and show the user what remains instead of looping.
 
 - Prefer the smallest change that works. No abstractions with one call site, no config for two values, no new dependency a few lines would replace, no "might need later" generality.
 - Reuse existing helpers, stores, and utils before writing new ones. Two sources of truth is a Medium.

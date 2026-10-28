@@ -45,7 +45,7 @@ Launch these in parallel with the diff path, the repo rules, and the instruction
 
 1. **Security and correctness**: untrusted content rendering, authz vs server rules, persisted state growth, polling and cache policy, date/timezone math, mutation flows (refetch, optimistic updates, double submit, error paths), error handling and logging, injection, secrets.
 2. **Duplication, simplification, over-engineering**: duplication inside the diff and with existing helpers in the repo, exports nobody imports, abstractions with one call site, config for two values, new dependencies that a few lines would replace, components or functions over 200 lines, speculative generality ("might need later"), comments that restate code, TODOs without tickets.
-3. **Tests, conventions, UX**: what each test file covers and misses (error paths, mappers, stores, timezone-dependent dates, tautological tests), convention violations from the repo rules, accessibility of new UI, copy quality.
+3. **Tests, conventions, UX**: what each test file covers and misses (error paths, mappers, stores, timezone-dependent dates, tautological tests), convention drift against both the repo rules and the neighboring code (run the `conventions` skill for the touched area if the author has no brief, then compare: layout, naming, exports, reused helpers vs re-created ones), accessibility of new UI, copy quality. Convention drift that a reviewer on this repo has flagged before is a Low, not a Nit.
 
 Skip the agents for small diffs, or when you are the subagent, and do the three passes yourself.
 
