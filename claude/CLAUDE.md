@@ -8,6 +8,17 @@
 - Do not refactor, clean up, improve, or touch anything beyond the literal request.
 - If something feels out of scope, flag it and ask before touching it.
 
+## Simple first
+
+Over-engineered code is the most common complaint about generated code here. Default to the plainest code that solves the stated problem.
+
+- Write the direct version: a function over a class, a literal over a config object, inline code over an abstraction with one call site.
+- No new helper, type, file, option, flag, or parameter unless something uses it today. Two call sites earn a helper; one does not.
+- No handling for cases that cannot happen, and no try/catch that only logs or re-throws.
+- Reuse what the repo already has (helpers, stores, utils, components) before writing anything new.
+- Comments explain a non-obvious why. Never restate what the code does.
+- Before finishing, re-read the diff and delete everything the task did not ask for. If a reviewer cannot understand the diff in one read, it is too clever.
+
 ## Testing
 
 - **Never run tests yourself** (no `yarn test`, `yarn jest`, `npm test`, `pytest`, etc.). It doesn't work in this environment — tests hang and leave ghost threads behind. Reason against the code, or ask the user to run them and paste the output.
